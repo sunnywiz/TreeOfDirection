@@ -15,5 +15,8 @@
   "bugs": {
     "url": "https://github.com/sunnywiz/TreeOfDirection/issues"
   },
-  "homepage": "https://github.com/sunnywiz/TreeOfDirection#readme"
+  "homepage": "https://github.com/sunnywiz/TreeOfDirection#readme",
+  "dependencies": {
+    "@google/maps": "^0.3.1"
+  }
 }
