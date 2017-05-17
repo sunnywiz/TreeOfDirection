@@ -1,10 +1,13 @@
+const bluebird = require('bluebird');
 const jscad = require('jscad');
-
 const config = {
+    origin: "8516 Brookside Drive West 40056",
     desiredBounds: { min: [0, 0, 0], max: [100, 100, 50] },
-    printRadius: 2
+    maxLatLng: [38.317138, -85.463906],
+    minLatLng: [38.294255, -85.501226],
+    steps: [4, 4],
+    printRadius: 1
 };
-
 const googleMapsClient = require('@google/maps').createClient({
     key: process.env.GOOGLE_MAPS_API_KEY,
     Promise: Promise
@@ -26,8 +29,6 @@ function doSomething(dataToPlot, result) {
         })
     });
 }
-
-var dataToPlot = [];
 
 function getBounds(dataToPlot) {
     var bounds = { min: dataToPlot[0].start.slice(0), max: dataToPlot[0].end.slice(0) };
@@ -54,36 +55,52 @@ function pointScale(point, bounds, desiredBounds) {
         var b = a / (bounds.max[i] - bounds.min[i]); // 0..1 
         var c = b * (desiredBounds.max[i] - desiredBounds.min[i]);  // 0..x
         var d = c + desiredBounds.min[i];
-        point[i] = d; 
+        point[i] = d;
     }
 }
 
-googleMapsClient.directions({
-    origin: "8516 Brookside Drive West 40056",
-    destination: "9300 Shelbyville Rd",
-    alternatives: true
-}).asPromise()
-    .then(response =>
-        doSomething(dataToPlot, response.json)
-    ).then(x => {
+var latlng = [];
+var latstep = (config.maxLatLng[0] - config.minLatLng[0]) / config.steps[0];
+var lngstep = (config.maxLatLng[1] - config.minLatLng[1]) / config.steps[1];
+for (var lat = config.minLatLng[0]; lat <= config.maxLatLng[0]; lat += latstep) {
+    for (var lng = config.minLatLng[1]; lng <= config.maxLatLng[1]; lng += lngstep) {
+        latlng.push([lat, lng]);
+    }
+}
 
-        var bounds = getBounds(dataToPlot);
-        console.log("bounds: ",bounds);
+var dataToPlot = [];
 
-        dataToPlot.forEach(segment => {
-            pointScale(segment.start, bounds, config.desiredBounds);
-            pointScale(segment.end, bounds, config.desiredBounds);
-        });
-        console.log("newbounds: ",getBounds(dataToPlot));
+bluebird.map(
+    latlng,
+    function (ll, i, l) {
+        console.log("Getting directions to ", ll);
+        return googleMapsClient.directions({
+            origin: config.origin,
+            destination: ll,
+            alternatives: true
+        }).asPromise()
+    }
+).then(data => {
+    console.log("plotting");
+    data.forEach(response => doSomething(dataToPlot, response.json));
 
-        var model = [];
-        dataToPlot.forEach(segment => {
-            var cylinder = new CSG.roundedCylinder({
-                start: segment.start,
-                end: segment.end,
-                radius: config.printRadius/2
-            });
-            model.push(cylinder);
-        });
-        jscad.renderFile(model, 'output.stl')
+    var bounds = getBounds(dataToPlot);
+    console.log("bounds: ", bounds);
+
+    dataToPlot.forEach(segment => {
+        pointScale(segment.start, bounds, config.desiredBounds);
+        pointScale(segment.end, bounds, config.desiredBounds);
     });
+    console.log("newbounds: ", getBounds(dataToPlot));
+
+    var model = [];
+    dataToPlot.forEach(segment => {
+        var cylinder = new CSG.roundedCylinder({
+            start: segment.start,
+            end: segment.end,
+            radius: config.printRadius / 2
+        });
+        model.push(cylinder);
+    });
+    jscad.renderFile(model, 'output.stl')
+});
