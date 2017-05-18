@@ -24,27 +24,20 @@ function addDirectionsToPlot(dataToPlot, result) {
 
             leg.steps.forEach(step => {
 
-                if (step.travel_mode != "DRIVING") { 
-                    return; 
+                if (step.travel_mode != "DRIVING") {
+                    return;
                 }
 
                 var polyLinePoints = polyline.decode(step.polyline.points);
                 var durationPerPoint = step.duration.value / (polyLinePoints.length - 1);
                 var newDuration = currentDuration + step.duration.value;
 
-                for (var pi = 1; pi < polyLinePoints.length; pi++) {
-                    var x1 = polyLinePoints[pi - 1][0];
-                    var y1 = polyLinePoints[pi - 1][1];
-                    var x2 = polyLinePoints[pi][0];
-                    var y2 = polyLinePoints[pi][1];
+                for (var pi = 0; pi < polyLinePoints.length; pi++) {
+                    var x = polyLinePoints[pi][0];
+                    var y = polyLinePoints[pi][1];
 
-                    chain.push({
-                        start: [x1, y1, currentDuration],
-                        end: [x2, y2, currentDuration + durationPerPoint]
-                    });
-                    currentDuration += durationPerPoint;
+                    chain.push([x, y, currentDuration + durationPerPoint * pi]);
                 }
-
                 currentDuration = newDuration;
             })
 
@@ -54,21 +47,13 @@ function addDirectionsToPlot(dataToPlot, result) {
 }
 
 function getBounds(dataToPlot) {
-    var bounds = { min: dataToPlot[0][0].start.slice(0), max: dataToPlot[0][0].end.slice(0) };
+    var bounds = { min: dataToPlot[0][0].slice(0), max: dataToPlot[0][0].slice(0) };
     dataToPlot.forEach(chain => {
         chain.forEach(link => {
-            if (link.start[0] < bounds.min[0]) bounds.min[0] = link.start[0];
-            if (link.start[1] < bounds.min[1]) bounds.min[1] = link.start[1];
-            if (link.start[2] < bounds.min[2]) bounds.min[2] = link.start[2];
-            if (link.start[0] > bounds.max[0]) bounds.max[0] = link.start[0];
-            if (link.start[1] > bounds.max[1]) bounds.max[1] = link.start[1];
-            if (link.start[2] > bounds.max[2]) bounds.max[2] = link.start[2];
-            if (link.end[0] < bounds.min[0]) bounds.min[0] = link.end[0];
-            if (link.end[1] < bounds.min[1]) bounds.min[1] = link.end[1];
-            if (link.end[2] < bounds.min[2]) bounds.min[2] = link.end[2];
-            if (link.end[0] > bounds.max[0]) bounds.max[0] = link.end[0];
-            if (link.end[1] > bounds.max[1]) bounds.max[1] = link.end[1];
-            if (link.end[2] > bounds.max[2]) bounds.max[2] = link.end[2];
+            for (var d = 0; d < 3; d++) {
+                if (link[d] < bounds.min[d]) bounds.min[d] = link[d];
+                if (link[d] > bounds.max[d]) bounds.max[d] = link[d];
+            }
         });
     });
     return bounds;
@@ -114,8 +99,7 @@ bluebird.map(
 
     dataToPlot.forEach(chain => {
         chain.forEach(segment => {
-            pointScale(segment.start, bounds, config.desiredBounds);
-            pointScale(segment.end, bounds, config.desiredBounds);
+            pointScale(segment, bounds, config.desiredBounds);
         });
     });
     console.log("newbounds: ", getBounds(dataToPlot));
@@ -123,15 +107,15 @@ bluebird.map(
     var model = [];
     dataToPlot.forEach(chain => {
 
+        for (var i=1; i<chain.length; i++) { 
 
-        chain.forEach(segment => {
             var cylinder = new CSG.roundedCylinder({
-                start: segment.start,
-                end: segment.end,
+                start: chain[i-1],
+                end: chain[i],
                 radius: config.printRadius / 2
             });
             model.push(cylinder);
-        })
+        };
     });
     jscad.renderFile(model, 'output.stl')
 });
