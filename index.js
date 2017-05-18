@@ -104,17 +104,27 @@ bluebird.map(
     });
     console.log("newbounds: ", getBounds(dataToPlot));
 
+    var minResolutionSq = Math.pow(config.printRadius * 4,2);
+
     var model = [];
     dataToPlot.forEach(chain => {
 
-        for (var i=1; i<chain.length; i++) { 
+        var pi = 0;
+        for (var i = 1; i < chain.length; i++) {
 
-            var cylinder = new CSG.roundedCylinder({
-                start: chain[i-1],
-                end: chain[i],
-                radius: config.printRadius / 2
-            });
-            model.push(cylinder);
+            var dsq = Math.pow(chain[i][0] - chain[pi][0], 2) +
+                Math.pow(chain[i][1] - chain[pi][1], 2) +
+                Math.pow(chain[i][2] - chain[pi][2], 2);
+            if (dsq > minResolutionSq || i == chain.length - 1) {
+
+                var cylinder = new CSG.roundedCylinder({
+                    start: chain[pi],
+                    end: chain[i],
+                    radius: config.printRadius / 2
+                });
+                model.push(cylinder);
+                pi = i;
+            }
         };
     });
     jscad.renderFile(model, 'output.stl')
