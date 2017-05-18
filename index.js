@@ -3,10 +3,10 @@ const jscad = require('jscad');
 const polyline = require('polyline');
 const config = {
     origin: "8516 Brookside Drive West 40056",
-    desiredBounds: { min: [0, 0, 0], max: [100, 100, 50] },
-    maxLatLng: [38.317138, -85.463906],
-    minLatLng: [38.294255, -85.501226],
-    steps: [5, 5],
+    desiredBounds: { min: [0, 0, 0], max: [100, 100, 100] },
+    maxLatLng: [38.300, -85.500],
+    minLatLng: [38.200, -85.600],
+    steps: [10, 10],
     printRadius: 1
 };
 const googleMapsClient = require('@google/maps').createClient({
@@ -89,7 +89,7 @@ bluebird.map(
             origin: config.origin,
             destination: ll,
             alternatives: false
-        }).asPromise()
+        }).asPromise();
     }
 ).then(data => {
     console.log("plotting");
@@ -105,7 +105,7 @@ bluebird.map(
     });
     console.log("newbounds: ", getBounds(dataToPlot));
 
-    var minResolutionSq = Math.pow(config.printRadius * 4,2);
+    var minResolutionSq = Math.pow(config.printRadius * 6,2);
 
     var model = [];
     dataToPlot.forEach(chain => {
