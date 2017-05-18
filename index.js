@@ -3,10 +3,10 @@ const jscad = require('jscad');
 const polyline = require('polyline');
 const config = {
     origin: "8516 Brookside Drive West 40056",
-    desiredBounds: { min: [0, 100, 0], max: [100, 0, 50] },
+    desiredBounds: { min: [0, 0, 0], max: [100, 100, 50] },
     maxLatLng: [38.317138, -85.463906],
     minLatLng: [38.294255, -85.501226],
-    steps: [1, 1],
+    steps: [5, 5],
     printRadius: 1
 };
 const googleMapsClient = require('@google/maps').createClient({
@@ -20,9 +20,9 @@ function addDirectionsToPlot(dataToPlot, result) {
         var currentDuration = 0;
         route.legs.forEach(leg => {
 
-            var chain = [];
-
             leg.steps.forEach(step => {
+
+                var chain = [];
 
                 if (step.travel_mode != "DRIVING") {
                     return;
@@ -33,15 +33,16 @@ function addDirectionsToPlot(dataToPlot, result) {
                 var newDuration = currentDuration + step.duration.value;
 
                 for (var pi = 0; pi < polyLinePoints.length; pi++) {
-                    var x = polyLinePoints[pi][0];
-                    var y = polyLinePoints[pi][1];
+                    var x = polyLinePoints[pi][1];
+                    var y = polyLinePoints[pi][0];
 
                     chain.push([x, y, currentDuration + durationPerPoint * pi]);
                 }
                 currentDuration = newDuration;
+
+                dataToPlot.push(chain);
             })
 
-            dataToPlot.push(chain);
         })
     })
 }
@@ -120,7 +121,8 @@ bluebird.map(
                 var cylinder = new CSG.roundedCylinder({
                     start: chain[pi],
                     end: chain[i],
-                    radius: config.printRadius / 2
+                    radius: config.printRadius / 2, 
+                    resolution: 4
                 });
                 model.push(cylinder);
                 pi = i;
