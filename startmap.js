@@ -2,7 +2,7 @@ const commandsQueries = require('./commandsQueries.js');
 
 let cq = new commandsQueries.CommandsQueries();
 
-const config = {
+var config = {
     origin: "700 N Hurstbourne Pkwy, Louisville, KY 40222",
     corner1: "Medora, KY",
     corner2: "Pendleton, KY",
@@ -20,8 +20,9 @@ async function doStuff() {
     config.lat2 = (corner1.lat > corner2.lat) ? corner1.lat : corner2.lat; 
     config.lng1 = (corner1.lng < corner2.lng) ? corner1.lng : corner2.lng; 
     config.lng2 = (corner1.lng > corner2.lng) ? corner1.lng : corner2.lng;   
-    
-    config = await cq.UpsertConfig(groupName, config);
+
+    var c2 = await cq.UpsertConfig(config);
+    console.log(c2); 
 }
 
 doStuff(); 
