@@ -6,8 +6,9 @@ var config = {
     origin: "8516 Brookside Drive West 40056",
     corner1: "Medora, KY",
     corner2: "Pendleton, KY",
-    steps: [100, 100],
-    groupName: "Louisville around Slingshot"
+    steps: [4, 4],
+    groupName: "Louisville around Slingshot",
+    status: 'requested'
 };
 
 async function doStuff() {
@@ -22,7 +23,21 @@ async function doStuff() {
     config.lng2 = (corner1.lng > corner2.lng) ? corner1.lng : corner2.lng;   
 
     var c2 = await cq.UpsertConfig(config);
-    console.log(c2); 
+    console.log("Updated Config with ID="+c2.configId ); 
+
+    var latStep = (config.lat2-config.lat1)/config.steps[0];
+    var lngStep = (config.lng2-config.lng1)/config.steps[1]; 
+    for (var lat = config.lat1; lat<config.lat2; lat += latStep ) { 
+        for (var lng=config.lng1; lng < config.lng2; lng += lngStep) { 
+            var x = await cq.EnsureDirectionRequest(c2.configId,{
+                origin: [originGeometry.lat, originGeometry.lng], 
+                destination: [ lat, lng ],
+                alternatives: false
+            });
+            console.log("got id "+x); 
+        }
+    }
+
 }
 
 doStuff(); 

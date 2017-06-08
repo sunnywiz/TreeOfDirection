@@ -42,6 +42,49 @@ class CommandsQueries {
         return r.json.results[0].geometry.location;
     }
 
+    async EnsureDirectionRequest(configId, request) { 
+        return new Promise((resolve,reject)=>{
+            this.db.query(
+                'select * from directions where ConfigId=? '+
+                ' and abs(OriginLat-?)<0.00001 '+
+                ' and abs(OriginLong-?)<0.00001 '+
+                ' and abs(DestinationLat-?)<0.00001 '+
+                ' and abs(DestinationLong-?)<0.00001 ',
+                [configId,request.origin[0],request.origin[1],request.destination[0],request.destination[1]],
+                (e1,r1,f1)=> { 
+                    if (e1) { 
+                        reject(e1);
+                    } else { 
+                        if (r1.length==0) { 
+                            // not found, insert
+                            this.db.query(
+                                ' insert into directions(ConfigId,Request,OriginLat,OriginLong,DestinationLat,DestinationLong,Status)'+
+                                '                 values(?,?,?,?,?,?,?)',
+                                [configId,
+                                 JSON.stringify(request),
+                                 request.origin[0],request.origin[1],
+                                 request.destination[0],request.destination[1],
+                                 'requested'],
+                                (e2,r2,f2)=>{
+                                    if (e2) { 
+                                        reject(e2); 
+                                    } else {
+                                        console.log('inserted');
+                                        resolve(r2.insertId);
+                                    }
+                                }
+                            );
+                        } else { 
+                            // found, all good. 
+                            console.log('existing Directions Request');
+                            resolve(r1[0].DirectionsID); 
+                        }
+                    }
+                }
+            )
+        }); 
+    }
+
     async UpsertConfig(config) {
         // https://benmccormick.org/2015/12/30/es6-patterns-converting-callbacks-to-promises/
         return new Promise((resolve, reject) => {
@@ -54,8 +97,8 @@ class CommandsQueries {
                     } else {
                         if (r1.length == 0) {
                             this.db.query(
-                                'insert into config(GroupName,JSON) values(?,?)',
-                                [config.groupName, JSON.stringify(config)],
+                                'insert into config(GroupName,JSON,Status) values(?,?,?)',
+                                [config.groupName, JSON.stringify(config),config.status],
                                 (e2, r2, f2) => {
                                     if (e2) {
                                         reject(e2);
@@ -65,11 +108,14 @@ class CommandsQueries {
                                     }
                                 });
                         } else {
+                            config.configId = r1[0].ConfigId;
                             this.db.query(
-                                'update config set GroupName=?,JSON=? where ConfigId=?',
-                                [config.groupName, JSON.stringify(config), r1[0].ConfigId],
+                                'update config set GroupName=?,JSON=?,Status=? where ConfigId=?',
+                                [config.groupName, JSON.stringify(config), config.status, config.configId],
                                 (e3, r3, f3) => {
-                                    if (e3) { reject(e3); }
+                                    if (e3) {
+                                        reject(e3);
+                                    }
                                     else if (r3.affectedRows != 1) {
                                         reject("update did not affect 1 row");
                                     } else {
@@ -83,7 +129,6 @@ class CommandsQueries {
             );
         });
     }
-
 
 }
 
