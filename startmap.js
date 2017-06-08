@@ -10,6 +10,9 @@ const config = {
     groupName: "Louisville around Slingshot"
 };
 
-console.log("out here");
+async function doStuff() { 
+    var coords1 = await cq.GeocodeAsync(config.origin);
+    console.log(coords1); 
+}
 
-
+doStuff().then(console.log("done")); 
