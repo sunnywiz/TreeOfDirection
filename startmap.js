@@ -3,7 +3,7 @@ const commandsQueries = require('./commandsQueries.js');
 let cq = new commandsQueries.CommandsQueries();
 
 var config = {
-    origin: "700 N Hurstbourne Pkwy, Louisville, KY 40222",
+    origin: "8516 Brookside Drive West 40056",
     corner1: "Medora, KY",
     corner2: "Pendleton, KY",
     steps: [100, 100],

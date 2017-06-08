@@ -26,7 +26,7 @@ class CommandsQueries {
             password: '',
             database: 'treeofdirection'
         });
-        this.db.connect(); 
+        this.db.connect();
 
     }
 
@@ -38,21 +38,49 @@ class CommandsQueries {
         if (r.json.status != "OK") {
             console.log(r.json);
             throw ("Geocode returned " + r.json.status);
-        } 
+        }
         return r.json.results[0].geometry.location;
     }
 
-    async UpsertConfig(config) { 
+    async UpsertConfig(config) {
         // https://benmccormick.org/2015/12/30/es6-patterns-converting-callbacks-to-promises/
-        return new Promise((resolve,reject)=>{ 
-            this.db.query('select 1+1 as solution',function(error,results,fields) { 
-                if (error) { 
-                    reject(error); 
-                } else {
-                    console.log(results[0]); 
-                    resolve(results); 
+        return new Promise((resolve, reject) => {
+            this.db.query(
+                'select ConfigId from config where GroupName=?',
+                [config.groupName],
+                (e1, r1, f1) => {
+                    if (e1) {
+                        reject(e1);
+                    } else {
+                        if (r1.length == 0) {
+                            this.db.query(
+                                'insert into config(GroupName,JSON) values(?,?)',
+                                [config.groupName, JSON.stringify(config)],
+                                (e2, r2, f2) => {
+                                    if (e2) {
+                                        reject(e2);
+                                    } else {
+                                        config.configId = r2.insertId;
+                                        resolve(config);
+                                    }
+                                });
+                        } else {
+                            this.db.query(
+                                'update config set GroupName=?,JSON=? where ConfigId=?',
+                                [config.groupName, JSON.stringify(config), r1[0].ConfigId],
+                                (e3, r3, f3) => {
+                                    if (e3) { reject(e3); }
+                                    else if (r3.affectedRows != 1) {
+                                        reject("update did not affect 1 row");
+                                    } else {
+                                        resolve(config);
+                                    }
+                                }
+                            );
+                        }
+                    }
                 }
-            });
+            );
         });
     }
 
