@@ -11,10 +11,12 @@ class CommandsQueries {
         if (!process.env.GOOGLE_MAPS_API_KEY) {
             throw 'missing enviornment variable GOOGLE_MAPS_API_KEY';
         }
+
         this.googleMapsClient = gmaps.createClient({
             key: process.env.GOOGLE_MAPS_API_KEY,
             Promise: Promise
         });
+
     }
 
     async GeocodeAsync(address) {
@@ -27,6 +29,10 @@ class CommandsQueries {
             throw ("Geocode returned " + r.json.status);
         } 
         return r.json.results[0].geometry.location;
+    }
+
+    async UpsertConfig(config) { 
+
     }
 
 
