@@ -9,6 +9,7 @@ const config = {
     steps: [10, 10],
     printRadius: 1
 };
+
 const googleMapsClient = require('@google/maps').createClient({
     key: process.env.GOOGLE_MAPS_API_KEY,
     Promise: Promise
