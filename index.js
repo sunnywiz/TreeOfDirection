@@ -1,14 +1,21 @@
+'use strict'
+
 const bluebird = require('bluebird');
 const jscad = require('jscad');
 const polyline = require('polyline');
+const hash = require('object-hash');
+const fs = require('fs');
+
 const config = {
-    origin: "8516 Brookside Drive West 40056",
+    origin: "335 Central Avenue 40056",
     desiredBounds: { min: [0, 0, 0], max: [100, 100, 100] },
     maxLatLng: [38.300, -85.500],
     minLatLng: [38.200, -85.600],
     steps: [10, 10],
-    printRadius: 1
+    printRadius: 1,
+    cacheDir: "./cache"
 };
+
 const googleMapsClient = require('@google/maps').createClient({
     key: process.env.GOOGLE_MAPS_API_KEY,
     Promise: Promise
@@ -45,6 +52,7 @@ function addDirectionsToPlot(dataToPlot, result) {
 
         })
     })
+
 }
 
 function getBounds(dataToPlot) {
@@ -70,64 +78,75 @@ function pointScale(point, bounds, desiredBounds) {
     }
 }
 
-var latlng = [];
-var latstep = (config.maxLatLng[0] - config.minLatLng[0]) / config.steps[0];
-var lngstep = (config.maxLatLng[1] - config.minLatLng[1]) / config.steps[1];
-for (var lat = config.minLatLng[0]; lat <= config.maxLatLng[0]; lat += latstep) {
-    for (var lng = config.minLatLng[1]; lng <= config.maxLatLng[1]; lng += lngstep) {
-        latlng.push([lat, lng]);
+var dataToPlot = [];
+
+async function cachedGoogleGetDirections(options) {
+    let file = config.cacheDir + "/googleDirections." + hash(options) + ".json";
+    if (fs.existsSync(file)) {
+        console.log("using cached file " + file + " for " + JSON.stringify(options));
+        let rawdata = fs.readFileSync(file);
+        return JSON.parse(rawdata);
+    } else {
+        console.log("asking google for " + JSON.stringify(options));
+        let data = await (googleMapsClient.directions(options).asPromise());
+        fs.writeFileSync(file, JSON.stringify(data));
+        console.log("... saved to " + file);
+        return data;
     }
 }
 
-var dataToPlot = [];
+void async function () {
 
-bluebird.map(
-    latlng,
-    function (ll, i, l) {
-        console.log("Getting directions to ", ll);
-        return googleMapsClient.directions({
+    var seedResponse = await cachedGoogleGetDirections(
+        {
             origin: config.origin,
-            destination: ll,
+            destination: [config.minLatLng[0], config.minLatLng[1]],
             alternatives: false
-        }).asPromise();
-    }
-).then(data => {
-    console.log("plotting");
-    data.forEach(response => addDirectionsToPlot(dataToPlot, response.json));
-
-    var bounds = getBounds(dataToPlot);
-    console.log("bounds: ", bounds);
-
-    dataToPlot.forEach(chain => {
-        chain.forEach(segment => {
-            pointScale(segment, bounds, config.desiredBounds);
         });
-    });
-    console.log("newbounds: ", getBounds(dataToPlot));
+    console.log(seedResponse);
 
-    var minResolutionSq = Math.pow(config.printRadius * 6,2);
+    // var latstep = (config.maxLatLng[0] - config.minLatLng[0]) / config.steps[0];
+    // var lngstep = (config.maxLatLng[1] - config.minLatLng[1]) / config.steps[1];
+    // for (var lat = config.minLatLng[0]; lat <= config.maxLatLng[0]; lat += latstep) {
+    //     for (var lng = config.minLatLng[1]; lng <= config.maxLatLng[1]; lng += lngstep) {
+    //         console.log("Getting directions to ", [lat, lng]);
+    //         console.log("Happiness");
+    //     }
 
-    var model = [];
-    dataToPlot.forEach(chain => {
+}();
 
-        var pi = 0;
-        for (var i = 1; i < chain.length; i++) {
+// var bounds = getBounds(dataToPlot);
+// console.log("bounds: ", bounds);
 
-            var dsq = Math.pow(chain[i][0] - chain[pi][0], 2) +
-                Math.pow(chain[i][1] - chain[pi][1], 2) +
-                Math.pow(chain[i][2] - chain[pi][2], 2);
-            if (dsq > minResolutionSq || i == chain.length - 1) {
+// dataToPlot.forEach(chain => {
+//     chain.forEach(segment => {
+//         pointScale(segment, bounds, config.desiredBounds);
+//     });
+// });
+// console.log("newbounds: ", getBounds(dataToPlot));
 
-                var cylinder = new CSG.roundedCylinder({
-                    start: chain[pi],
-                    end: chain[i],
-                    radius: config.printRadius / 2, 
-                    resolution: 4
-                });
-                model.push(cylinder);
-                pi = i;
-            }
-        };
-    });
-    jscad.renderFile(model, 'output.stl')
-});
+// var minResolutionSq = Math.pow(config.printRadius * 6,2);
+
+// var model = [];
+// dataToPlot.forEach(chain => {
+
+//     var pi = 0;
+//     for (var i = 1; i < chain.length; i++) {
+
+//         var dsq = Math.pow(chain[i][0] - chain[pi][0], 2) +
+//             Math.pow(chain[i][1] - chain[pi][1], 2) +
+//             Math.pow(chain[i][2] - chain[pi][2], 2);
+//         if (dsq > minResolutionSq || i == chain.length - 1) {
+
+//             var cylinder = new CSG.roundedCylinder({
+//                 start: chain[pi],
+//                 end: chain[i],
+//                 radius: config.printRadius / 2, 
+//                 resolution: 4
+//             });
+//             model.push(cylinder);
+//             pi = i;
+//         }
+//     };
+// });
+// jscad.renderFile(model, 'output.stl');
