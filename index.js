@@ -28,12 +28,40 @@ const googleMapsClient = require('@google/maps').createClient({
     Promise: Promise
 });
 
+const latStep = (config.maxLatLng[0] - config.minLatLng[0]) / config.steps[0];
+const lngStep = (config.maxLatLng[1] - config.minLatLng[1]) / config.steps[1];
+var minStep = Math.abs(latStep) < Math.abs(lngStep) ? Math.abs(latStep) : Math.abs(lngStep);
+
 function addLocation(locations, lat, lng) {
+
+    // we know that we won't exceed the resolution of latstep and lngstep
+    lat = lat - config.minLatLng[0]; 
+    lat = lat / latStep; 
+    lat = Math.round(lat); 
+    lat = lat * latStep + config.minLatLng[0]; 
+
+    lng = lng - config.minLatLng[1];
+    lng = lng / lngStep; 
+    lng = Math.round(lng);
+    lng = lng * lngStep + config.minLatLng[1];
+
     let key = hash([lat, lng]);
     locations[key] = [lat, lng];
 }
 
 function checkContainsLocation(locations, lat, lng) { 
+
+    // we know that we won't exceed the resolution of latstep and lngstep
+    lat = lat - config.minLatLng[0]; 
+    lat = lat / latStep; 
+    lat = Math.round(lat); 
+    lat = lat * latStep + config.minLatLng[0]; 
+
+    lng = lng - config.minLatLng[1];
+    lng = lng / lngStep; 
+    lng = Math.round(lng);
+    lng = lng * lngStep + config.minLatLng[1];
+
     let key = hash([lat, lng]);
     return locations.hasOwnProperty(key);
 }
@@ -136,11 +164,9 @@ function getLeastDistanceTo(visitedLocations, lat, lng) {
 }
 
 function chooseNextUnvisitedLocation(visitedLocations, ruledOutLocations, minDistance) {
-    var latstep = (config.maxLatLng[0] - config.minLatLng[0]) / config.steps[0];
-    var lngstep = (config.maxLatLng[1] - config.minLatLng[1]) / config.steps[1];
     var most = { distance: 0, x: null, y: null };
-    for (var lat = config.minLatLng[0]; lat <= config.maxLatLng[0]; lat += latstep) {
-        for (var lng = config.minLatLng[1]; lng <= config.maxLatLng[1]; lng += lngstep) {
+    for (var lat = config.minLatLng[0]; lat <= config.maxLatLng[0]; lat += latStep) {
+        for (var lng = config.minLatLng[1]; lng <= config.maxLatLng[1]; lng += lngStep) {
 
             if (!checkContainsLocation(ruledOutLocations, lat, lng)) {
                 var check = getLeastDistanceTo(visitedLocations, lat, lng);
@@ -245,7 +271,7 @@ void async function () {
                 Math.pow(chain[i][2] - chain[pi][2], 2);
             if (dsq > minResolutionSq || i == chain.length - 1) {
 
-                var cylinder = new CSG.roundedCylinder({
+                var cylinder = new CSG.cylinder({
                     start: chain[pi],
                     end: chain[i],
                     radius: printConfig.printRadius / 2,
