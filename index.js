@@ -9,13 +9,19 @@ const util = require('util');
 
 const config = {
     origin: "335 Central Avenue 40056",
-    desiredBounds: { min: [0, 0, 0], max: [100, 100, 100] },
     maxLatLng: [38.425, -85.344],
     minLatLng: [38.259, -85.641],
-    steps: [25, 25],
-    printRadius: 1, // in units of desired bounds
-    cacheDir: "./cache"
+    steps: [50, 50],
 };
+
+const runConfig = { 
+    cacheDir: "./cache"
+}
+
+const printConfig = { 
+    desiredBounds: { min: [0, 0, 0], max: [100, 100, 100] },
+    printRadius: 1, // in units of desired bounds
+}
 
 const googleMapsClient = require('@google/maps').createClient({
     key: process.env.GOOGLE_MAPS_API_KEY,
@@ -91,7 +97,7 @@ function pointScale(point, bounds, desiredBounds) {
 }
 
 async function cachedGoogleGetDirections(options) {
-    let file = config.cacheDir + "/googleDirections." + hash(options) + ".json";
+    let file = runConfig.cacheDir + "/googleDirections." + hash(options) + ".json";
     if (fs.existsSync(file)) {
         console.log("using cached file " + file + " for " + JSON.stringify(options));
         let rawdata = fs.readFileSync(file);
@@ -151,11 +157,10 @@ function chooseNextUnvisitedLocation(visitedLocations, ruledOutLocations, minDis
     return most;
 }
 
-var dataToPlot = [];
-var visitedLocations = {};
-var ruledOutLocations = {};
-
-void async function () {
+async function getDataToPlot(config) { 
+    var dataToPlot = [];
+    var visitedLocations = {};
+    var ruledOutLocations = {};
 
     var seedResponse = await cachedGoogleGetDirections(
         {
@@ -178,7 +183,7 @@ void async function () {
         console.log(util.format("Found distance %d percent", (nextStop.distance / minDistance) * 100));
         if (nextStop.distance < minDistance) {
             console.log("No more closer points found");
-            break;
+            return dataToPlot; 
         } else {
             var nextResponse = await cachedGoogleGetDirections({
                 origin: config.origin,
@@ -189,6 +194,32 @@ void async function () {
         }
     }
     while (true);
+}
+
+async function getCachedDataToPlot(config) { 
+    
+    let file = runConfig.cacheDir + "/dataToPlot." + hash(config) + ".json";
+    if (fs.existsSync(file)) {
+        console.log("using cached file " + file + " for " + JSON.stringify(config));
+        let rawdata = fs.readFileSync(file);
+        return JSON.parse(rawdata);
+    } else {
+        console.log("calculating data to plot for " + JSON.stringify(config));
+        let data = await getDataToPlot(config);
+        if (data) { 
+            fs.writeFileSync(file, JSON.stringify(data));
+            console.log("... saved to " + file);
+            let rawdata = fs.readFileSync(file);
+            return JSON.parse(rawdata);
+        } else {
+            return [];
+        }
+    }
+}    
+
+void async function () {
+
+    let dataToPlot = await getCachedDataToPlot(config); 
 
     var bounds = getBounds(dataToPlot);
 
@@ -196,12 +227,12 @@ void async function () {
 
     dataToPlot.forEach(chain => {
         chain.forEach(segment => {
-            pointScale(segment, bounds, config.desiredBounds);
+            pointScale(segment, bounds, printConfig.desiredBounds);
         });
     });
     console.log("newbounds: ", getBounds(dataToPlot));
 
-    var minResolutionSq = Math.pow(config.printRadius * 6, 2);
+    var minResolutionSq = Math.pow(printConfig.printRadius * 6, 2);
 
     var model = [];
     dataToPlot.forEach(chain => {
@@ -217,7 +248,7 @@ void async function () {
                 var cylinder = new CSG.roundedCylinder({
                     start: chain[pi],
                     end: chain[i],
-                    radius: config.printRadius / 2,
+                    radius: printConfig.printRadius / 2,
                     resolution: 4
                 });
                 model.push(cylinder);
