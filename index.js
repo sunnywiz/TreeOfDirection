@@ -11,7 +11,8 @@ const config = {
     origin: "335 Central Avenue 40056",
     maxLatLng: [38.425, -85.344],
     minLatLng: [38.259, -85.641],
-    steps: [50, 50],
+//    steps: [50, 50],
+    steps: [10,10]
 };
 
 const runConfig = { 
@@ -19,8 +20,14 @@ const runConfig = {
 }
 
 const printConfig = { 
-    desiredBounds: { min: [0, 0, 0], max: [100, 100, 100] },
-    printRadius: 1, // in units of desired bounds
+    // these are the limits of the printer
+    desiredBounds: { min: [0, 0, 0], max: [100, 100, 50] },
+    printRadius: 1, // in units of desired bounds -- determines cylinder thickness
+}
+
+const tessConfig = { 
+    // these are x,y Math.Round(ed) so # of divisions.  height doesn't matter as much
+    desiredBounds: { min: [0,0,0], max:[50,50,50]}
 }
 
 const googleMapsClient = require('@google/maps').createClient({
@@ -243,21 +250,19 @@ async function getCachedDataToPlot(config) {
     }
 }    
 
-void async function () {
-
-    let dataToPlot = await getCachedDataToPlot(config); 
-
+function rescale(dataToPlot, desiredBounds) { 
     var bounds = getBounds(dataToPlot);
-
     console.log("bounds: ", bounds);
-
     dataToPlot.forEach(chain => {
         chain.forEach(segment => {
-            pointScale(segment, bounds, printConfig.desiredBounds);
+            pointScale(segment, bounds, desiredBounds);
         });
     });
-    console.log("newbounds: ", getBounds(dataToPlot));
+    console.log("newbounds: ", getBounds(dataToPlot));        
+} 
 
+function doCylinderPrint(dataToPlot) { 
+    // assumes you have already scaled it to print bounds
     var minResolutionSq = Math.pow(printConfig.printRadius * 6, 2);
 
     var model = [];
@@ -283,6 +288,121 @@ void async function () {
         };
     });
     jscad.renderFile(model, 'output.stl');
+}
+
+function setxy(a,x,y,v) { 
+    if (typeof a !== 'object' || a === null) throw "1st parameter must be an object";
+    var b = a[x]; 
+    if (typeof a['ykeys'] !== 'object') a['ykeys'] = {}; 
+    if (typeof b !== 'object' || b === null) { 
+        b = {}; 
+        a[x] = b; 
+    }
+    a['ykeys'][y]=y;
+    b[y] = v; 
+}
+function getxy(a,x,y) { 
+    if (typeof a !== 'object' || a === null) throw "1st parameter must be an object"; 
+    var b = a[x]; 
+    if (typeof b !== 'object' || b === null) return undefined; 
+    return b[y]; 
+}
+
+function plot2D(heightMap, start, end) { 
+    var x1 = start[0]; 
+    var y1 = start[1];
+    var h1 = start[2]; 
+    var x2 = end[0];
+    var y2 = end[1];
+    var h2 = end[2]; 
+
+    var dx = Math.abs(x1-x2);
+    var dy = Math.abs(y1-y2); 
+
+    if (dx<0.5 && dy < 0.5) {  
+        var x = Math.round((x1+x2)/2.0);
+        var y = Math.round((y1+y2)/2.0);
+        var height = (h1+h2)/2.0;  
+        var c = getxy(heightMap, x, y); 
+        if (c && c.height && c.height < height) return;   // already good
+
+        setxy(heightMap, x, y, { height: height, locked: 1});
+    } else { 
+        // divide into two! 
+        var mx = (start[0]+end[0])/2.0; 
+        var my = (start[1]+end[1])/2.0; 
+        var mh = (h1+h2)/2.0; 
+        plot2D(heightMap, start, [mx,my,mh]);
+        plot2D(heightMap, [mx,my,mh], end);
+    }
+}
+
+function iteratexy(heightMap, finit, fxy, fendx) { 
+    var xkeys = Object.keys(heightMap).filter(function(x) { return x != 'ykeys'}).sort(function(a,b) { return a-b }); 
+    var ykeys = Object.keys(heightMap['ykeys']).sort(function(a,b) { return a-b});
+    var buffer = finit();  
+    for (var yk of ykeys) { 
+        for (var xk of xkeys) { 
+            var v = getxy(heightMap,xk,yk); 
+            buffer = fxy(buffer, v); 
+        }
+        buffer = fendx(buffer); 
+    }
+    return buffer; 
+}
+
+function dumpHeightMap(heightMap) { 
+    // this should be two functions
+
+    var legend = ".,:;oxOX#$";
+    var legendLength = legend.length-1; 
+    var minHeight = tessConfig.desiredBounds.min[2]; 
+    var maxHeight = tessConfig.desiredBounds.max[2]; 
+
+    return iteratexy(heightMap, 
+        function() { return '';},
+        function(buffer, v) { 
+            if (v && v.height) { 
+                var h = v.height; 
+                h = Math.round((h - minHeight) / (maxHeight-minHeight) * legendLength); 
+                if (h<0) h = 0; 
+                if (h > legendLength) h = legendLength;
+                return buffer + ' ' + legend.charAt(h); 
+            } else { 
+                return buffer + '  ';
+            }
+            return buffer; 
+        }, 
+        function(buffer) { 
+            return buffer + '\n'; 
+        }); 
+}
+
+function tess(dataToPlot) { 
+    rescale(dataToPlot, tessConfig.desiredBounds);
+
+    var heightMap = {}; 
+
+    dataToPlot.forEach(chain => {
+        var pi = 0;
+        for (var i = 1; i < chain.length; i++) {
+            plot2D(heightMap, chain[i-1], chain[i]);
+        };
+    });
+
+    console.log(dumpHeightMap(heightMap)); 
+}
+
+void async function () {
+
+    let dataToPlot = await getCachedDataToPlot(config); 
+
+    // var clone1 = JSON.parse(JSON.stringify(dataToPlot));
+    // rescale(clone1, printConfig.desiredBounds); 
+    // doCylinderPrint(dataToPlot);
+
+    tess(dataToPlot); 
+
 
 }();
 
