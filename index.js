@@ -27,7 +27,7 @@ const printConfig = {
 
 const tessConfig = { 
     // these are x,y Math.Round(ed) so # of divisions.  height doesn't matter as much
-    desiredBounds: { min: [0,0,0], max:[50,50,50]}
+    desiredBounds: { min: [0,0,0], max:[150,50,50]}
 }
 
 const googleMapsClient = require('@google/maps').createClient({
@@ -339,7 +339,7 @@ function plot2D(heightMap, start, end) {
 
 function iteratexy(heightMap, finit, fxy, fendx) { 
     var xkeys = Object.keys(heightMap).filter(function(x) { return x != 'ykeys'}).sort(function(a,b) { return a-b }); 
-    var ykeys = Object.keys(heightMap['ykeys']).sort(function(a,b) { return a-b});
+    var ykeys = Object.keys(heightMap['ykeys']).sort(function(a,b) { return b-a});
     var buffer = finit();  
     for (var yk of ykeys) { 
         for (var xk of xkeys) { 
@@ -354,7 +354,7 @@ function iteratexy(heightMap, finit, fxy, fendx) {
 function dumpHeightMap(heightMap) { 
     // this should be two functions
 
-    var legend = ".,:;oxOX#$";
+    var legend = ".`,-:;+oxOX#%@$";
     var legendLength = legend.length-1; 
     var minHeight = tessConfig.desiredBounds.min[2]; 
     var maxHeight = tessConfig.desiredBounds.max[2]; 
@@ -364,14 +364,13 @@ function dumpHeightMap(heightMap) {
         function(buffer, v) { 
             if (v && v.height) { 
                 var h = v.height;
-                var c = ' '; 
-                if (v.locked) c='`';  
                 h = Math.round((h - minHeight) / (maxHeight-minHeight) * legendLength); 
+                if (v.locked) h--; 
                 if (h<0) h = 0; 
                 if (h > legendLength) h = legendLength;
-                return buffer + c + legend.charAt(h); 
+                return buffer + legend.charAt(h); 
             } else { 
-                return buffer + '  ';
+                return buffer + ' ';
             }
             return buffer; 
         }, 
@@ -385,11 +384,16 @@ function tessaSmurf(heightMap) {
     var xkeys = Object.keys(heightMap).filter(function(x) { return x != 'ykeys'}).sort(function(a,b) { return a-b }); 
     var ykeys = Object.keys(heightMap['ykeys']).sort(function(a,b) { return a-b});
 
+    var biggestDiff = 0.0; 
+
     for (var i=0; i<xkeys.length; i++) { 
         for (var j=0; j<ykeys.length; j++) { 
             var v = getxy(heightMap,xkeys[i],ykeys[j])
             if (v && v.locked) continue; 
             // okay, it is not locked.  
+
+            var prev = v?v.height:0; 
+
             var sum = 0.0;
             var num = 0;  
             if (i>0) { 
@@ -411,9 +415,12 @@ function tessaSmurf(heightMap) {
             if (num>0) { 
                 var newHeight = sum/num; 
                 setxy(heightMap,xkeys[i],ykeys[j],{height:newHeight, locked:0});
+                var diff = newHeight - prev; 
+                if (diff > biggestDiff) biggestDiff = diff; 
             }
         }
     }
+    return biggestDiff; 
 }
 
 function tess(dataToPlot) { 
@@ -441,13 +448,11 @@ void async function () {
 
     var heightMap = tess(dataToPlot); 
     console.log(dumpHeightMap(heightMap)); 
-    tessaSmurf(heightMap);
-    tessaSmurf(heightMap);
-    tessaSmurf(heightMap);
-    tessaSmurf(heightMap);
-    tessaSmurf(heightMap);
+    while (true) { 
+        var diff=tessaSmurf(heightMap); 
+        if (diff < 0.1) break; 
+        console.log("smurfed: diff="+diff);
+    }
     console.log(dumpHeightMap(heightMap)); 
-
-
 }();
 
