@@ -346,7 +346,7 @@ function iteratexy(heightMap, finit, fxy, fendx) {
             var v = getxy(heightMap,xk,yk); 
             buffer = fxy(buffer, v); 
         }
-        buffer = fendx(buffer); 
+        if (fendx) buffer = fendx(buffer); 
     }
     return buffer; 
 }
@@ -363,11 +363,13 @@ function dumpHeightMap(heightMap) {
         function() { return '';},
         function(buffer, v) { 
             if (v && v.height) { 
-                var h = v.height; 
+                var h = v.height;
+                var c = ' '; 
+                if (v.locked) c='`';  
                 h = Math.round((h - minHeight) / (maxHeight-minHeight) * legendLength); 
                 if (h<0) h = 0; 
                 if (h > legendLength) h = legendLength;
-                return buffer + ' ' + legend.charAt(h); 
+                return buffer + c + legend.charAt(h); 
             } else { 
                 return buffer + '  ';
             }
@@ -376,6 +378,42 @@ function dumpHeightMap(heightMap) {
         function(buffer) { 
             return buffer + '\n'; 
         }); 
+}
+
+function tessaSmurf(heightMap) { 
+    // not quite an iteratexy because need lots of keys interaction
+    var xkeys = Object.keys(heightMap).filter(function(x) { return x != 'ykeys'}).sort(function(a,b) { return a-b }); 
+    var ykeys = Object.keys(heightMap['ykeys']).sort(function(a,b) { return a-b});
+
+    for (var i=0; i<xkeys.length; i++) { 
+        for (var j=0; j<ykeys.length; j++) { 
+            var v = getxy(heightMap,xkeys[i],ykeys[j])
+            if (v && v.locked) continue; 
+            // okay, it is not locked.  
+            var sum = 0.0;
+            var num = 0;  
+            if (i>0) { 
+                var w = getxy(heightMap,xkeys[i-1],ykeys[j]);
+                if (w) {sum += w.height; num++ } 
+            }
+            if (i<xkeys.length-1) { 
+                var w = getxy(heightMap,xkeys[i+1],ykeys[j]);
+                if (w) {sum += w.height; num++ } 
+            }
+            if (j>0) { 
+                var w = getxy(heightMap,xkeys[i],ykeys[j-1]);
+                if (w) {sum += w.height; num++ } 
+            }
+            if (j<ykeys.length-1) { 
+                var w = getxy(heightMap,xkeys[i],ykeys[j+1]);
+                if (w) {sum += w.height; num++ } 
+            }
+            if (num>0) { 
+                var newHeight = sum/num; 
+                setxy(heightMap,xkeys[i],ykeys[j],{height:newHeight, locked:0});
+            }
+        }
+    }
 }
 
 function tess(dataToPlot) { 
@@ -390,7 +428,7 @@ function tess(dataToPlot) {
         };
     });
 
-    console.log(dumpHeightMap(heightMap)); 
+    return heightMap; 
 }
 
 void async function () {
@@ -401,7 +439,14 @@ void async function () {
     // rescale(clone1, printConfig.desiredBounds); 
     // doCylinderPrint(dataToPlot);
 
-    tess(dataToPlot); 
+    var heightMap = tess(dataToPlot); 
+    console.log(dumpHeightMap(heightMap)); 
+    tessaSmurf(heightMap);
+    tessaSmurf(heightMap);
+    tessaSmurf(heightMap);
+    tessaSmurf(heightMap);
+    tessaSmurf(heightMap);
+    console.log(dumpHeightMap(heightMap)); 
 
 
 }();
