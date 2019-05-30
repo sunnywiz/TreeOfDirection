@@ -8,9 +8,9 @@ const fs = require('fs');
 const util = require('util');
 
 const config = {
-    origin: "335 Central Avenue 40056",
-    minLatLng: [38.259, -85.641],  // must be smaller numbers than maxLatLng
-    maxLatLng: [38.425, -85.344],
+    origin: "8516 Brookside Drive West 40056",
+    minLatLng: [38.210, -85.678],  // must be smaller numbers than maxLatLng
+    maxLatLng: [38.342, -85.447],
     steps: [25, 25],
 }
 
@@ -24,7 +24,7 @@ const printConfig = {
     desiredBounds: { min: [0, 0, 0], max: [100, 100, 50] },
     printRadius: 1, // in units of desired bounds -- determines cylinder thickness
     minThickness: 1,  
-    surfaceOffset: -1   
+    surfaceOffset: .5   
 }
 
 const tessConfig = { 
@@ -456,8 +456,9 @@ function minecraftLikeTile(minHeight, maxHeight) {
 function iterpolatedTile(h00, h01, h11, h10, thick)
 {
     var hAvg = (h00+h01+h10+h11)/4.0; 
+    
     var mid = [0.5, 0.5, hAvg];
-    var botMid = [0.5,0.5,hAvg-thick];
+    var botMid = [0.5,0.5,0];
 
     return CSG.polyhedron({
         points : [
@@ -466,10 +467,10 @@ function iterpolatedTile(h00, h01, h11, h10, thick)
             [1,0,h01],  // 2
             [1,1,h11],  // 3
             [0,1,h10],  // 4
-            [0,0,h00-thick], // 5
-            [1,0,h01-thick], // 6
-            [1,1,h11-thick], // 7
-            [0,1,h10-thick],  // 8 
+            [0,0,0], // 5
+            [1,0,0], // 6
+            [1,1,0], // 7
+            [0,1,0],  // 8 
             botMid   // 9
             
         ],    
