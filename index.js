@@ -9,7 +9,7 @@ const util = require('util');
 
 const config = {
     origin: "335 Central Avenue 40056",
-    minLatLng: [38.259, -85.641],
+    minLatLng: [38.259, -85.641],  // must be smaller numbers than maxLatLng
     maxLatLng: [38.425, -85.344],
     //    steps: [50, 50],
     steps: [20,20]
@@ -21,15 +21,17 @@ const runConfig = {
 
 const printConfig = { 
     // these are the limits of the printer .. mm ? 
+    // MUST START at 0,0,0 for now
     desiredBounds: { min: [0, 0, 0], max: [100, 100, 50] },
     printRadius: 1, // in units of desired bounds -- determines cylinder thickness
-    minThickness: 1,  // in units of desired bounds -- eventually
+    minThickness: 1,  
     surfaceOffset: -0.5
 }
 
 const tessConfig = { 
     // these are x,y Math.Round(ed) so # of divisions.  height doesn't matter as much
-    desiredBounds: { min: [0,0,0], max:[100,100,50]}
+    // MUST start at 0,0,0
+    desiredBounds: { min: [0,0,0], max:[10,10,50]}
 }
 
 const googleMapsClient = require('@google/maps').createClient({
@@ -440,34 +442,88 @@ function tess(dataToPlot) {
     return heightMap; 
 }
 
-function scoobySnack(x,y,minHeight, maxHeight, minThick) { 
-
-    if (maxHeight - minHeight < minThick) minHeight = maxHeight - minThick; 
-    
+// returns it at 0,0..1,1 but with the right height 
+function minecraftLikeTile(minHeight, maxHeight) {     
     return CSG
     .cube({
         center:[0.5,0.5,0.5],
         radius: [0.5,0.5,0.5]
     })
     .scale([1,1,(maxHeight-minHeight)])
-    .translate([x,y,minHeight + printConfig.surfaceOffset])
+    .translate([0,0,minHeight])
     ; 
+}
+
+function iterpolatedTile(hBottom, h00, h01, h11, h10)
+{
+    var hAvg = (h00+h01+h10+h11)/4.0; 
+    var mid = [0.5, 0.5, hAvg];
+
+    return [ 
+        polyhedron({
+            points : [
+                mid,        // 0 
+                [0,0,h00],  // 1 
+                [1,0,h01],  // 2
+                [1,1,h11],  // 3
+                [0,1,h10],  // 4
+                [0,0,hBottom], // 5
+                [1,0,hBottom], // 6
+                [1,1,hBottom], // 7
+                [0,1,hBottom]  // 8 
+                
+            ],    
+            polygons: [
+                // top
+                
+                [0,2,1],
+                [0,3,2],
+                [0,4,3],
+                [0,1,4], 
+             
+                // sides   
+                [1,2,6,5],
+                [2,3,7,6],
+                [3,4,8,7],
+                [4,1,5,8],
+                
+                // bottom
+                [5,6,7,8]
+            ]
+        })
+    ]; 
 }
 
 function bigScoobySnack(heightMap) { 
     var xkeys = Object.keys(heightMap).filter(function(x) { return x != 'ykeys'}).sort(function(a,b) { return a-b }); 
     var ykeys = Object.keys(heightMap['ykeys']).sort(function(a,b) { return a-b});
-    var allSnacks = []; 
+    var allTiles = []; 
     for (var i=0; i<xkeys.length-1; i++) { 
         for (var j=0; j<ykeys.length-1; j++) { 
             var h1 = getxy(heightMap, xkeys[i], xkeys[j]).height;
             var h2 = getxy(heightMap, xkeys[i+1], xkeys[j]).height;
             var h3 = getxy(heightMap, xkeys[i], xkeys[j+1]).height;
             var h4 = getxy(heightMap, xkeys[i+1], xkeys[j+1]).height;
-            allSnacks.push(scoobySnack(Number(xkeys[i]), Number(ykeys[j]), Math.min(h1,h2,h3,h4),Math.max(h1,h2,h3,h4),printConfig.minThickness));
+
+            var x1 = Number(xkeys[i]);
+            var x2 = Number(xkeys[i+1]);
+            var y1 = Number(ykeys[j]);
+            var y2 = Number(ykeys[j+1]);
+            x1 = x1 * printConfig.desiredBounds.max[0] / tessConfig.desiredBounds.max[0];
+            y1 = y1 * printConfig.desiredBounds.max[1] / tessConfig.desiredBounds.max[1]; 
+            x2 = x2 * printConfig.desiredBounds.max[0] / tessConfig.desiredBounds.max[0];
+            y2 = y2 * printConfig.desiredBounds.max[1] / tessConfig.desiredBounds.max[1]; 
+
+            var minHeight = Math.min(h1,h2,h3,h4); 
+            var maxHeight = Math.max(h1,h2,h3,h4); 
+            if (maxHeight - minHeight < printConfig.minThickness) minHeight = maxHeight - printConfig.minThickness; 
+
+            var tile = minecraftLikeTile(minHeight,maxHeight);
+            tile = tile.scale([x2-x1, y2-y1,1]).translate([x1,y1,printConfig.surfaceOffset]);
+            allTiles.push(tile);
         }
     }
-    return allSnacks; 
+    return allTiles; 
 }
 
 
