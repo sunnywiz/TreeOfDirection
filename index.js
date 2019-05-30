@@ -25,13 +25,13 @@ const printConfig = {
     desiredBounds: { min: [0, 0, 0], max: [100, 100, 50] },
     printRadius: 1, // in units of desired bounds -- determines cylinder thickness
     minThickness: 1,  
-    surfaceOffset: -0.5
+    surfaceOffset: 0.0   
 }
 
 const tessConfig = { 
     // these are x,y Math.Round(ed) so # of divisions.  height doesn't matter as much
     // MUST start at 0,0,0
-    desiredBounds: { min: [0,0,0], max:[10,10,50]}
+    desiredBounds: { min: [0,0,0], max:[50,50,50]}
 }
 
 const googleMapsClient = require('@google/maps').createClient({
@@ -459,39 +459,37 @@ function iterpolatedTile(hBottom, h00, h01, h11, h10)
     var hAvg = (h00+h01+h10+h11)/4.0; 
     var mid = [0.5, 0.5, hAvg];
 
-    return [ 
-        polyhedron({
-            points : [
-                mid,        // 0 
-                [0,0,h00],  // 1 
-                [1,0,h01],  // 2
-                [1,1,h11],  // 3
-                [0,1,h10],  // 4
-                [0,0,hBottom], // 5
-                [1,0,hBottom], // 6
-                [1,1,hBottom], // 7
-                [0,1,hBottom]  // 8 
-                
-            ],    
-            polygons: [
-                // top
-                
-                [0,2,1],
-                [0,3,2],
-                [0,4,3],
-                [0,1,4], 
-             
-                // sides   
-                [1,2,6,5],
-                [2,3,7,6],
-                [3,4,8,7],
-                [4,1,5,8],
-                
-                // bottom
-                [5,6,7,8]
-            ]
-        })
-    ]; 
+    return CSG.polyhedron({
+        points : [
+            mid,        // 0 
+            [0,0,h00],  // 1 
+            [1,0,h01],  // 2
+            [1,1,h11],  // 3
+            [0,1,h10],  // 4
+            [0,0,hBottom], // 5
+            [1,0,hBottom], // 6
+            [1,1,hBottom], // 7
+            [0,1,hBottom]  // 8 
+            
+        ],    
+        faces: [
+            // top
+            
+            [0,2,1],
+            [0,3,2],
+            [0,4,3],
+            [0,1,4], 
+            
+            // sides   
+            [1,2,6,5],
+            [2,3,7,6],
+            [3,4,8,7],
+            [4,1,5,8],
+            
+            // bottom
+            [5,6,7,8]
+        ]
+    });
 }
 
 function bigScoobySnack(heightMap) { 
@@ -515,10 +513,9 @@ function bigScoobySnack(heightMap) {
             y2 = y2 * printConfig.desiredBounds.max[1] / tessConfig.desiredBounds.max[1]; 
 
             var minHeight = Math.min(h1,h2,h3,h4); 
-            var maxHeight = Math.max(h1,h2,h3,h4); 
-            if (maxHeight - minHeight < printConfig.minThickness) minHeight = maxHeight - printConfig.minThickness; 
+            var bottom = minHeight - printConfig.minThickness; 
 
-            var tile = minecraftLikeTile(minHeight,maxHeight);
+            var tile = iterpolatedTile(bottom, h1,h2,h4,h3);
             tile = tile.scale([x2-x1, y2-y1,1]).translate([x1,y1,printConfig.surfaceOffset]);
             allTiles.push(tile);
         }
