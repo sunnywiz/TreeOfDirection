@@ -9,10 +9,10 @@ const util = require('util');
 
 const config = {
     origin: "335 Central Avenue 40056",
-    maxLatLng: [38.425, -85.344],
     minLatLng: [38.259, -85.641],
-//    steps: [50, 50],
-    steps: [10,10]
+    maxLatLng: [38.425, -85.344],
+    //    steps: [50, 50],
+    steps: [20,20]
 };
 
 const runConfig = { 
@@ -20,14 +20,16 @@ const runConfig = {
 }
 
 const printConfig = { 
-    // these are the limits of the printer
+    // these are the limits of the printer .. mm ? 
     desiredBounds: { min: [0, 0, 0], max: [100, 100, 50] },
     printRadius: 1, // in units of desired bounds -- determines cylinder thickness
+    minThickness: 1,  // in units of desired bounds -- eventually
+    surfaceOffset: -0.5
 }
 
 const tessConfig = { 
     // these are x,y Math.Round(ed) so # of divisions.  height doesn't matter as much
-    desiredBounds: { min: [0,0,0], max:[150,50,50]}
+    desiredBounds: { min: [0,0,0], max:[100,100,50]}
 }
 
 const googleMapsClient = require('@google/maps').createClient({
@@ -261,7 +263,7 @@ function rescale(dataToPlot, desiredBounds) {
     console.log("newbounds: ", getBounds(dataToPlot));        
 } 
 
-function doCylinderPrint(dataToPlot) { 
+function getCylinderPrint(dataToPlot) { 
     // assumes you have already scaled it to print bounds
     var minResolutionSq = Math.pow(printConfig.printRadius * 6, 2);
 
@@ -287,7 +289,7 @@ function doCylinderPrint(dataToPlot) {
             }
         };
     });
-    jscad.renderFile(model, 'output.stl');
+    return model;
 }
 
 function setxy(a,x,y,v) { 
@@ -354,7 +356,7 @@ function iteratexy(heightMap, finit, fxy, fendx) {
 function dumpHeightMap(heightMap) { 
     // this should be two functions
 
-    var legend = ".`,-:;+oxOX#%@$";
+    var legend = ".`:;+oxOX#%$@";
     var legendLength = legend.length-1; 
     var minHeight = tessConfig.desiredBounds.min[2]; 
     var maxHeight = tessConfig.desiredBounds.max[2]; 
@@ -365,7 +367,7 @@ function dumpHeightMap(heightMap) {
             if (v && v.height) { 
                 var h = v.height;
                 h = Math.round((h - minHeight) / (maxHeight-minHeight) * legendLength); 
-                if (v.locked) h--; 
+                //if (v.locked) h--; 
                 if (h<0) h = 0; 
                 if (h > legendLength) h = legendLength;
                 return buffer + legend.charAt(h); 
@@ -438,21 +440,67 @@ function tess(dataToPlot) {
     return heightMap; 
 }
 
+function scoobySnack(x,y,minHeight, maxHeight, minThick) { 
+
+    if (maxHeight - minHeight < minThick) minHeight = maxHeight - minThick; 
+    
+    return CSG
+    .cube({
+        center:[0.5,0.5,0.5],
+        radius: [0.5,0.5,0.5]
+    })
+    .scale([1,1,(maxHeight-minHeight)])
+    .translate([x,y,minHeight + printConfig.surfaceOffset])
+    ; 
+}
+
+function bigScoobySnack(heightMap) { 
+    var xkeys = Object.keys(heightMap).filter(function(x) { return x != 'ykeys'}).sort(function(a,b) { return a-b }); 
+    var ykeys = Object.keys(heightMap['ykeys']).sort(function(a,b) { return a-b});
+    var allSnacks = []; 
+    for (var i=0; i<xkeys.length-1; i++) { 
+        for (var j=0; j<ykeys.length-1; j++) { 
+            var h1 = getxy(heightMap, xkeys[i], xkeys[j]).height;
+            var h2 = getxy(heightMap, xkeys[i+1], xkeys[j]).height;
+            var h3 = getxy(heightMap, xkeys[i], xkeys[j+1]).height;
+            var h4 = getxy(heightMap, xkeys[i+1], xkeys[j+1]).height;
+            allSnacks.push(scoobySnack(Number(xkeys[i]), Number(ykeys[j]), Math.min(h1,h2,h3,h4),Math.max(h1,h2,h3,h4),printConfig.minThickness));
+        }
+    }
+    return allSnacks; 
+}
+
+
 void async function () {
 
     let dataToPlot = await getCachedDataToPlot(config); 
 
-    // var clone1 = JSON.parse(JSON.stringify(dataToPlot));
-    // rescale(clone1, printConfig.desiredBounds); 
-    // doCylinderPrint(dataToPlot);
+    var clone1 = JSON.parse(JSON.stringify(dataToPlot));
+    rescale(clone1, printConfig.desiredBounds); 
+    var cylinderPrint = getCylinderPrint(clone1);
+    await jscad.renderFile(cylinderPrint, 'cylinderPrint.stl');
 
     var heightMap = tess(dataToPlot); 
-    console.log(dumpHeightMap(heightMap)); 
+//    console.log(dumpHeightMap(heightMap)); 
     while (true) { 
         var diff=tessaSmurf(heightMap); 
         if (diff < 0.1) break; 
         console.log("smurfed: diff="+diff);
     }
-    console.log(dumpHeightMap(heightMap)); 
+    // console.log(dumpHeightMap(heightMap)); 
+
+    console.log("Generating Scooby Surface");
+    var heightMapStl = bigScoobySnack(heightMap);
+    await jscad.renderFile(heightMapStl, 'heightMap.stl',);
+
+    var a = []; 
+    a = a.concat(cylinderPrint);
+    a = a.concat(heightMapStl);
+
+    console.log("generating combined file");
+    jscad.renderFile(a, 'combined.stl');
+
+    console.log("done");
+
 }();
 
