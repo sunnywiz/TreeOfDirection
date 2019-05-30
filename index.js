@@ -454,7 +454,7 @@ function minecraftLikeTile(minHeight, maxHeight) {
     ; 
 }
 
-function iterpolatedTile(hBottom, h00, h01, h11, h10)
+function iterpolatedTile(h00, h01, h11, h10, thick)
 {
     var hAvg = (h00+h01+h10+h11)/4.0; 
     var mid = [0.5, 0.5, hAvg];
@@ -466,10 +466,10 @@ function iterpolatedTile(hBottom, h00, h01, h11, h10)
             [1,0,h01],  // 2
             [1,1,h11],  // 3
             [0,1,h10],  // 4
-            [0,0,hBottom], // 5
-            [1,0,hBottom], // 6
-            [1,1,hBottom], // 7
-            [0,1,hBottom]  // 8 
+            [0,0,h00-thick], // 5
+            [1,0,h01-thick], // 6
+            [1,1,h11-thick], // 7
+            [0,1,h10-thick]  // 8 
             
         ],    
         faces: [
@@ -487,7 +487,8 @@ function iterpolatedTile(hBottom, h00, h01, h11, h10)
             [4,1,5,8],
             
             // bottom
-            [5,6,7,8]
+            [5,6,7],
+            [7,8,5]
         ]
     });
 }
@@ -512,10 +513,7 @@ function bigScoobySnack(heightMap) {
             x2 = x2 * printConfig.desiredBounds.max[0] / tessConfig.desiredBounds.max[0];
             y2 = y2 * printConfig.desiredBounds.max[1] / tessConfig.desiredBounds.max[1]; 
 
-            var minHeight = Math.min(h1,h2,h3,h4); 
-            var bottom = minHeight - printConfig.minThickness; 
-
-            var tile = iterpolatedTile(bottom, h1,h2,h4,h3);
+            var tile = iterpolatedTile(h1,h2,h4,h3, printConfig.minThickness);
             tile = tile.scale([x2-x1, y2-y1,1]).translate([x1,y1,printConfig.surfaceOffset]);
             allTiles.push(tile);
         }
@@ -552,6 +550,11 @@ void async function () {
 
     console.log("generating combined file");
     jscad.renderFile(a, 'combined.stl');
+
+    console.log("unioning");
+    var unioned = union(a); 
+    jscad.renderFile(unioned, 'unioned.stl');
+
 
     console.log("done");
 
