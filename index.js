@@ -11,9 +11,8 @@ const config = {
     origin: "335 Central Avenue 40056",
     minLatLng: [38.259, -85.641],  // must be smaller numbers than maxLatLng
     maxLatLng: [38.425, -85.344],
-    //    steps: [50, 50],
-    steps: [20,20]
-};
+    steps: [25, 25],
+}
 
 const runConfig = { 
     cacheDir: "./cache"
@@ -25,7 +24,7 @@ const printConfig = {
     desiredBounds: { min: [0, 0, 0], max: [100, 100, 50] },
     printRadius: 1, // in units of desired bounds -- determines cylinder thickness
     minThickness: 1,  
-    surfaceOffset: 0.0   
+    surfaceOffset: -1   
 }
 
 const tessConfig = { 
@@ -458,6 +457,7 @@ function iterpolatedTile(h00, h01, h11, h10, thick)
 {
     var hAvg = (h00+h01+h10+h11)/4.0; 
     var mid = [0.5, 0.5, hAvg];
+    var botMid = [0.5,0.5,hAvg-thick];
 
     return CSG.polyhedron({
         points : [
@@ -469,7 +469,8 @@ function iterpolatedTile(h00, h01, h11, h10, thick)
             [0,0,h00-thick], // 5
             [1,0,h01-thick], // 6
             [1,1,h11-thick], // 7
-            [0,1,h10-thick]  // 8 
+            [0,1,h10-thick],  // 8 
+            botMid   // 9
             
         ],    
         faces: [
@@ -487,8 +488,10 @@ function iterpolatedTile(h00, h01, h11, h10, thick)
             [4,1,5,8],
             
             // bottom
-            [5,6,7],
-            [7,8,5]
+            [9,5,6],
+            [9,6,7],
+            [9,7,8],
+            [9,8,5]
         ]
     });
 }
@@ -551,10 +554,10 @@ void async function () {
     console.log("generating combined file");
     jscad.renderFile(a, 'combined.stl');
 
-    console.log("unioning");
-    var unioned = union(a); 
-    jscad.renderFile(unioned, 'unioned.stl');
-
+    // console.log("unioning");
+    // var unioned = union(a); 
+    // jscad.renderFile(unioned, 'unioned.stl');
+    // apparently renderFile already does some unioning, and the result is slicable. 
 
     console.log("done");
 
