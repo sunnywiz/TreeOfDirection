@@ -24,7 +24,7 @@ const printConfig = {
     desiredBounds: { min: [0, 0, 0], max: [100, 100, 50] },
     printRadius: 1, // in units of desired bounds -- determines cylinder thickness
     minThickness: 1,  
-    surfaceOffset: .5   
+    surfaceOffset: -1   
 }
 
 const tessConfig = { 
@@ -81,6 +81,20 @@ function addDirectionsToPlot(dataToPlot, visitedLocations, result) {
         console.log("route: ", route.summary);
         var currentDuration = 0;
         route.legs.forEach(leg => {
+
+            // trim off things at the ends of the legs that are too slow 
+            // 1 mile in 2 minutes ~= 30 mph
+            var i=leg.steps.length-1; 
+            while (i>5) { 
+                if (leg.steps[i].duration.value < 120  && 
+                    leg.steps[i].distance.value < 1609) { 
+                    leg.steps.pop();
+                    i--; 
+                    continue;  
+                } else { 
+                    break; 
+                }
+            }
 
             leg.steps.forEach(step => {
 
@@ -264,6 +278,38 @@ function rescale(dataToPlot, desiredBounds) {
     console.log("newbounds: ", getBounds(dataToPlot));        
 } 
 
+function getRamp(start, end, thick) {
+    var s = new CSG.Vector3D(start);
+    var sb = new CSG.Vector3D([s._x, s._y, 0]);
+    var e = new CSG.Vector3D(end);
+    var eb = new CSG.Vector3D([e._x, e._y, 0]);
+
+    var direction = e.minus(s);
+    var n = new CSG.Vector3D([0, 0, 10]); // straight up
+    var crossed = direction.cross(n).unit().times(thick / 2); // to the clockwise
+
+    return CSG.polyhedron({
+        points: [
+            s.minus(crossed),
+            e.minus(crossed),
+            e.plus(crossed),
+            s.plus(crossed),
+            sb.minus(crossed),
+            eb.minus(crossed),
+            eb.plus(crossed),
+            sb.plus(crossed)
+        ],
+        faces: [
+            [0, 1, 2, 3],
+            [4, 5, 6, 7],
+            [0, 4, 5, 1],
+            [2, 6, 7, 3],
+            [0, 3, 7, 4],
+            [1, 5, 6, 2]
+        ]
+    });
+}
+
 function getCylinderPrint(dataToPlot) { 
     // assumes you have already scaled it to print bounds
     var minResolutionSq = Math.pow(printConfig.printRadius * 6, 2);
@@ -279,13 +325,16 @@ function getCylinderPrint(dataToPlot) {
                 Math.pow(chain[i][2] - chain[pi][2], 2);
             if (dsq > minResolutionSq || i == chain.length - 1) {
 
-                var cylinder = new CSG.cylinder({
-                    start: chain[pi],
-                    end: chain[i],
-                    radius: printConfig.printRadius / 2,
-                    resolution: 4
-                });
-                model.push(cylinder);
+                // var cylinder = new CSG.cylinder({
+                //     start: chain[pi],
+                //     end: chain[i],
+                //     radius: printConfig.printRadius / 2,
+                //     resolution: 4
+                // });
+                // model.push(cylinder);
+
+                var ramp = getRamp(chain[pi],chain[i],printConfig.printRadius);
+                model.push(ramp); 
                 pi = i;
             }
         };
@@ -525,15 +574,13 @@ function bigScoobySnack(heightMap) {
     return allTiles; 
 }
 
-
-void async function () {
-
-    let dataToPlot = await getCachedDataToPlot(config); 
+async function getUnionedPrint(config1, name) { 
+    let dataToPlot = await getCachedDataToPlot(config1); 
 
     var clone1 = JSON.parse(JSON.stringify(dataToPlot));
     rescale(clone1, printConfig.desiredBounds); 
     var cylinderPrint = getCylinderPrint(clone1);
-    await jscad.renderFile(cylinderPrint, 'cylinderPrint.stl');
+    jscad.renderFile(cylinderPrint, name+'_cylinderPrint.stl');
 
     var heightMap = tess(dataToPlot); 
 //    console.log(dumpHeightMap(heightMap)); 
@@ -546,21 +593,40 @@ void async function () {
 
     console.log("Generating Scooby Surface");
     var heightMapStl = bigScoobySnack(heightMap);
-    await jscad.renderFile(heightMapStl, 'heightMap.stl',);
+    jscad.renderFile(heightMapStl, name+'_heightMap.stl',);
 
     var a = []; 
     a = a.concat(cylinderPrint);
     a = a.concat(heightMapStl);
 
     console.log("generating combined file");
-    jscad.renderFile(a, 'combined.stl');
+    jscad.renderFile(a, name+'_combined.stl');
 
-    // console.log("unioning");
-    // var unioned = union(a); 
-    // jscad.renderFile(unioned, 'unioned.stl');
-    // apparently renderFile already does some unioning, and the result is slicable. 
+    console.log("unioning");
+    var unioned = union(a); 
+    jscad.renderFile(unioned, name+'_unioned.stl');
 
+    return unioned; 
+}
+
+void async function () {
+
+    config.origin = "8516 Brookside Drive West 40056";
+    var unioned1 = await getUnionedPrint(config, "8516"); 
+
+/*    config.origin = "335 Central Ave 40056";
+    var unioned2 = await getUnionedPrint(config, "335"); 
+
+    console.log("Combining models"); 
+    var block = cube().scale(printConfig.desiredBounds.max);
+    var intersect1 = difference(block,unioned1); 
+    var intersect2 = difference(block,unioned2);
+    var intersect3 = union(intersect1, intersect2); 
+    var intersect = difference(block, intersect3); 
+    
+    jscad.renderFile(intersect,'both.stl');
+    //apparently renderFile already does some unioning, and the result is slicable. 
+*/
     console.log("done");
-
 }();
 
