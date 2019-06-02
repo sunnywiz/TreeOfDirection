@@ -21,10 +21,10 @@ const runConfig = {
 const printConfig = { 
     // these are the limits of the printer .. mm ? 
     // MUST START at 0,0,0 for now
-    desiredBounds: { min: [0, 0, 0], max: [100, 100, 50] },
+    desiredBounds: { min: [0,0,0], max: [100, 100, 50] },
     printRadius: 1, // in units of desired bounds -- determines cylinder thickness
     minThickness: 1,  
-    surfaceOffset: -1   
+    surfaceOffset: 0   
 }
 
 const tessConfig = { 
@@ -119,7 +119,6 @@ function addDirectionsToPlot(dataToPlot, visitedLocations, result) {
 
                 dataToPlot.push(chain);
             })
-
         })
     })
 
@@ -284,19 +283,20 @@ function getRamp(start, end, thick) {
     var e = new CSG.Vector3D(end);
     var eb = new CSG.Vector3D([e._x, e._y, 0]);
 
-    var direction = e.minus(s);
+    var direction = e.minus(s).unit();
+    var d = new CSG.Vector3D(direction._x, direction._y, 0); 
     var n = new CSG.Vector3D([0, 0, 10]); // straight up
     var crossed = direction.cross(n).unit().times(thick / 2); // to the clockwise
 
     return CSG.polyhedron({
         points: [
             s.minus(crossed),
-            e.minus(crossed),
-            e.plus(crossed),
+            e.minus(crossed).plus(d),
+            e.plus(crossed).plus(d),
             s.plus(crossed),
             sb.minus(crossed),
-            eb.minus(crossed),
-            eb.plus(crossed),
+            eb.minus(crossed).plus(d),
+            eb.plus(crossed).plus(d),
             sb.plus(crossed)
         ],
         faces: [
@@ -312,7 +312,7 @@ function getRamp(start, end, thick) {
 
 function getCylinderPrint(dataToPlot) { 
     // assumes you have already scaled it to print bounds
-    var minResolutionSq = Math.pow(printConfig.printRadius * 6, 2);
+    var minResolutionSq = Math.pow(printConfig.printRadius*4, 2);
 
     var model = [];
     dataToPlot.forEach(chain => {
@@ -323,7 +323,7 @@ function getCylinderPrint(dataToPlot) {
             var dsq = Math.pow(chain[i][0] - chain[pi][0], 2) +
                 Math.pow(chain[i][1] - chain[pi][1], 2) +
                 Math.pow(chain[i][2] - chain[pi][2], 2);
-            if (dsq > minResolutionSq || i == chain.length - 1) {
+            if (dsq > minResolutionSq || i == chain.length-1) {
 
                 // var cylinder = new CSG.cylinder({
                 //     start: chain[pi],
@@ -574,7 +574,7 @@ function bigScoobySnack(heightMap) {
     return allTiles; 
 }
 
-async function getUnionedPrint(config1, name) { 
+async function getCombinedPrint(config1, name) { 
     let dataToPlot = await getCachedDataToPlot(config1); 
 
     var clone1 = JSON.parse(JSON.stringify(dataToPlot));
@@ -600,33 +600,30 @@ async function getUnionedPrint(config1, name) {
     a = a.concat(heightMapStl);
 
     console.log("generating combined file");
+
+    //apparently renderFile already does some unioning, and the result is slicable. 
     jscad.renderFile(a, name+'_combined.stl');
 
-    console.log("unioning");
-    var unioned = union(a); 
-    jscad.renderFile(unioned, name+'_unioned.stl');
-
-    return unioned; 
+    return a; 
 }
 
 void async function () {
 
     config.origin = "8516 Brookside Drive West 40056";
-    var unioned1 = await getUnionedPrint(config, "8516"); 
+    var combined1 = await getCombinedPrint(config, "8516"); 
 
-/*    config.origin = "335 Central Ave 40056";
-    var unioned2 = await getUnionedPrint(config, "335"); 
+    config.origin = "335 Central Ave 40056";
+    var combined2 = await getCombinedPrint(config, "335"); 
 
-    console.log("Combining models"); 
-    var block = cube().scale(printConfig.desiredBounds.max);
-    var intersect1 = difference(block,unioned1); 
-    var intersect2 = difference(block,unioned2);
-    var intersect3 = union(intersect1, intersect2); 
-    var intersect = difference(block, intersect3); 
+    // var unioned = union(a); 
+    // var block = cube().scale(printConfig.desiredBounds.max);
+    // var intersect1 = difference(block,unioned1); 
+    // var intersect2 = difference(block,unioned2);
+    // var intersect3 = union(intersect1, intersect2); 
+    // var intersect = difference(block, intersect3); 
     
-    jscad.renderFile(intersect,'both.stl');
-    //apparently renderFile already does some unioning, and the result is slicable. 
-*/
+    // jscad.renderFile(intersect,'both.stl');
+
     console.log("done");
 }();
 
