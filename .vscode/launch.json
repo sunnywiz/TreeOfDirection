@@ -9,7 +9,7 @@
             "request": "launch",
             "name": "Launch Program",
             "program": "${workspaceRoot}/index.js", 
-            "env": { "GOOGLE_MAPS_API_KEY": 
+            "env": { "GOOGLE_MAPS_API_KEY": ""
             }
         }
     ]
