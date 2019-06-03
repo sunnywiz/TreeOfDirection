@@ -10,7 +10,7 @@ const config = {
     origin: "8516 Brookside Drive West 40056",
     minLatLng: [38.210, -85.678],  // must be smaller numbers than maxLatLng
     maxLatLng: [38.342, -85.447],
-    steps: [5, 5],
+    steps: [25, 25],
 }
 
 const runConfig = {
