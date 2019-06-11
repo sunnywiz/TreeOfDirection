@@ -20,16 +20,9 @@ const runConfig = {
 const printConfig = {
     // these are the limits of the printer .. mm ? 
     // MUST START at 0,0,0 for now
-    desiredBounds: { min: [0, 0, 0], max: [100, 100, 50] },
+    desiredBounds: { min: [0, 0, 0], max: [75, 75, 20] },
     printRadius: 1, // in units of desired bounds -- determines cylinder thickness
-    minThickness: 1,
-    surfaceOffset: 0
-}
-
-const tessConfig = {
-    // these are x,y Math.Round(ed) so # of divisions.  height doesn't matter as much
-    // MUST start at 0,0,0
-    desiredBounds: { min: [0, 0, 0], max: [50, 50, 50] }
+    minThickness: 1, // added onto the bottom  
 }
 
 const googleMapsClient = require('@google/maps').createClient({
@@ -280,11 +273,11 @@ function scaleDataToPlot(dataToPlot, initialBounds, desiredBounds) {
     return result; 
 }
 
-function getRamp(start, end, thick) {
+function getRamp(start, end, thick, zero) {
     var s = new CSG.Vector3D(start);
-    var sb = new CSG.Vector3D([s._x, s._y, 0]);
+    var sb = new CSG.Vector3D([s._x, s._y, zero]);
     var e = new CSG.Vector3D(end);
-    var eb = new CSG.Vector3D([e._x, e._y, 0]);
+    var eb = new CSG.Vector3D([e._x, e._y, zero]);
 
     var direction = e.minus(s).unit();
     var d = new CSG.Vector3D(direction._x, direction._y, 0);
@@ -328,7 +321,7 @@ function getRampPrint(dataToPlot) {
                 Math.pow(chain[i][2] - chain[pi][2], 2);
             if (dsq > minResolutionSq || i == chain.length - 1) {
 
-                var ramp = getRamp(chain[pi], chain[i], printConfig.printRadius);
+                var ramp = getRamp(chain[pi], chain[i], printConfig.printRadius, -printConfig.minThickness);
                 model.push(ramp);
                 pi = i;
             }
