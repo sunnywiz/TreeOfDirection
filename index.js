@@ -344,6 +344,122 @@ function getBiggestBounds(b1, b2) {
     };
 }
 
+function setxy(a,x,y,v) { 
+    if (typeof a !== 'object' || a === null) throw "1st parameter must be an object";
+    var b = a[x]; 
+    if (typeof a['ykeys'] !== 'object') a['ykeys'] = {}; 
+    if (typeof b !== 'object' || b === null) { 
+        b = {}; 
+        a[x] = b; 
+    }
+    a['ykeys'][y]=y;
+    b[y] = v; 
+}
+function getxy(a,x,y) { 
+    if (typeof a !== 'object' || a === null) throw "1st parameter must be an object"; 
+    var b = a[x]; 
+    if (typeof b !== 'object' || b === null) return undefined; 
+    return b[y]; 
+}
+
+function plot2D(heightMap, start, end, identifier) { 
+    var x1 = start[0]; 
+    var y1 = start[1];
+    var h1 = start[2]; 
+    var x2 = end[0];
+    var y2 = end[1];
+    var h2 = end[2]; 
+
+    var dx = Math.abs(x1-x2);
+    var dy = Math.abs(y1-y2); 
+
+    if (dx<0.5 && dy < 0.5) {  
+        var x = Math.round((x1+x2)/2.0);
+        var y = Math.round((y1+y2)/2.0);
+        var height = (h1+h2)/2.0;  
+        var c = getxy(heightMap, x, y); 
+        if (c && c.height && c.height < height) return;   // already good, not changing it
+
+        setxy(heightMap, x, y, { height: height, identifier: identifier});
+    } else { 
+        // divide into two! 
+        var mx = (start[0]+end[0])/2.0; 
+        var my = (start[1]+end[1])/2.0; 
+        var mh = (h1+h2)/2.0; 
+        plot2D(heightMap, start, [mx,my,mh]);
+        plot2D(heightMap, [mx,my,mh], end);
+    }
+}
+
+function iteratexy(heightMap, finit, fxy, fendx) { 
+    var xkeys = Object.keys(heightMap).filter(function(x) { return x != 'ykeys'}).sort(function(a,b) { return a-b }); 
+    var ykeys = Object.keys(heightMap['ykeys']).sort(function(a,b) { return b-a});
+    var buffer = finit();  
+    for (var yk of ykeys) { 
+        for (var xk of xkeys) { 
+            var v = getxy(heightMap,xk,yk); 
+            buffer = fxy(buffer, v); 
+        }
+        if (fendx) buffer = fendx(buffer); 
+    }
+    return buffer; 
+}
+
+function dumpHeightMap(heightMap) { 
+    // this should be two functions
+
+    var legend = ".`:;+oxOX#%$@";
+    var legendLength = legend.length-1; 
+    var minHeight = printConfig.desiredBounds.min[2]; 
+    var maxHeight = printConfig.desiredBounds.max[2]; 
+
+    return iteratexy(heightMap, 
+        function() { return '';},
+        function(buffer, v) { 
+            if (v && v.height) { 
+                var h = v.height;
+                h = Math.round((h - minHeight) / (maxHeight-minHeight) * legendLength); 
+                //if (v.locked) h--; 
+                if (h<0) h = 0; 
+                if (h > legendLength) h = legendLength;
+                return buffer + legend.charAt(h); 
+            } else { 
+                return buffer + ' ';
+            }
+            return buffer; 
+        }, 
+        function(buffer) { 
+            return buffer + '\n'; 
+        }); 
+}
+
+function dumpHeightMapByID(heightMap) { 
+
+    return iteratexy(heightMap, 
+        function() { return '';},
+        function(buffer, v) { 
+            if (v && v.identifier) { 
+                return buffer + v.identifier; 
+            } else { 
+                return buffer + ' ';
+            }
+        }, 
+        function(buffer) { 
+            return buffer + '\n'; 
+        }); 
+}
+
+function printAndIdentifyToHeightMap(heightMap, dataToPlot, identifier)
+{
+    dataToPlot.forEach(chain => {
+        var pi = 0;
+        for (var i = 1; i < chain.length; i++) {
+            plot2D(heightMap, chain[i-1], chain[i], identifier);
+        };
+    });
+}
+
+
 void async function () {
 
     config.origin = "8516 Brookside Drive West 40056";
@@ -357,11 +473,22 @@ void async function () {
 
     var bounds3 = getBiggestBounds(bounds1, bounds2);
 
-    var scaled1 = scaleDataToPlot(dataToPlot1, bounds3, printConfig.desiredBounds);
+    var scaled1 = scaleDataToPlot(dataToPlot1, bounds3, printConfig.desiredBounds);    
+    var scaled2 = scaleDataToPlot(dataToPlot2, bounds3, printConfig.desiredBounds);
+
+    var heightMap = {}; 
+    printAndIdentifyToHeightMap(heightMap, scaled1,'8');
+    printAndIdentifyToHeightMap(heightMap, scaled2,'3');
+    console.log(dumpHeightMap(heightMap));
+    console.log(dumpHeightMapByID(heightMap));
+    var mask8 = getMaskFromHeightMapByID(heightMap,'8');
+    jscad.renderFile(mask8,'8516_mask.stl');
+    var mask3 = getMaskFromHeightMapByID(heightMap,'3');
+    jscad.renderFile(mask3,'335_mask.stl');
+
     var print1 = getRampPrint(scaled1);
     jscad.renderFile(print1, '8516.stl');
 
-    var scaled2 = scaleDataToPlot(dataToPlot2, bounds3, printConfig.desiredBounds);
     var print2 = getRampPrint(scaled2); 
     jscad.renderFile(print2, '335.stl'); 
 
