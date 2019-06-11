@@ -459,6 +459,24 @@ function printAndIdentifyToHeightMap(heightMap, dataToPlot, identifier)
     });
 }
 
+function getMaskFromHeightMapByID(heightMap, identifier) { 
+    var csgs = []; 
+    var xkeys = Object.keys(heightMap).filter(function(x) { return x != 'ykeys'}).sort(function(a,b) { return a-b }); 
+    var ykeys = Object.keys(heightMap['ykeys']).sort(function(a,b) { return b-a});
+    for (var yk of ykeys) { 
+        for (var xk of xkeys) { 
+            var v = getxy(heightMap,xk,yk); 
+            if (v && v.identifier==identifier) { 
+                csgs.push(
+                    CSG.cube()  // 0-1
+                    .scale([1,1,printConfig.desiredBounds.max[2]]) // all the way up
+                    .translate([xk-0.5,yk-0.5,0]) // matches up the rounding
+                );
+            }
+        }
+    }
+    return union(csgs);
+}
 
 void async function () {
 
