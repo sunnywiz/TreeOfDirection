@@ -10,7 +10,7 @@ const config = {
     origin: "8516 Brookside Drive West 40056",
     minLatLng: [38.210, -85.678],  // must be smaller numbers than maxLatLng
     maxLatLng: [38.342, -85.447],
-    steps: [25, 25],
+    steps: [5, 5],
 }
 
 const runConfig = {
@@ -362,12 +362,12 @@ function getxy(a,x,y) {
     return b[y]; 
 }
 
-function plot2D(heightMap, start, end, identifier) { 
-    var x1 = start[0]; 
-    var y1 = start[1];
+function plot2D(heightMap, start, end, scale, identifier) { 
+    var x1 = start[0] / scale; 
+    var y1 = start[1] / scale;
     var h1 = start[2]; 
-    var x2 = end[0];
-    var y2 = end[1];
+    var x2 = end[0] / scale;
+    var y2 = end[1] / scale;
     var h2 = end[2]; 
 
     var dx = Math.abs(x1-x2);
@@ -449,17 +449,17 @@ function dumpHeightMapByID(heightMap) {
         }); 
 }
 
-function printAndIdentifyToHeightMap(heightMap, dataToPlot, identifier)
+function printAndIdentifyToHeightMap(heightMap, dataToPlot, scale, identifier)
 {
     dataToPlot.forEach(chain => {
         var pi = 0;
         for (var i = 1; i < chain.length; i++) {
-            plot2D(heightMap, chain[i-1], chain[i], identifier);
+            plot2D(heightMap, chain[i-1], chain[i], scale, identifier);
         };
     });
 }
 
-function getMaskFromHeightMapByID(heightMap, identifier) { 
+function getMaskFromHeightMapByID(heightMap, scale, identifier) { 
     var csgs = []; 
     var xkeys = Object.keys(heightMap).filter(function(x) { return x != 'ykeys'}).sort(function(a,b) { return a-b }); 
     var ykeys = Object.keys(heightMap['ykeys']).sort(function(a,b) { return b-a});
@@ -467,11 +467,10 @@ function getMaskFromHeightMapByID(heightMap, identifier) {
         for (var xk of xkeys) { 
             var v = getxy(heightMap,xk,yk); 
             if (v && v.identifier==identifier) { 
-                csgs.push(
-                    CSG.cube()  // 0-1
-                    .scale([1,1,printConfig.desiredBounds.max[2]]) // all the way up
-                    .translate([xk-0.5,yk-0.5,0]) // matches up the rounding
-                );
+                var cube = CSG.cube().scale([0.5,0.5,0.5]); // -0.5 .. 0.5
+                cube = cube.scale([scale,scale,printConfig.desiredBounds.max[2]]); // all the way up
+                cube = cube.translate([xk*scale,yk*scale,0]) // matches up the rounding
+            csgs.push(cube);
             }
         }
     }
@@ -495,20 +494,24 @@ void async function () {
     var scaled2 = scaleDataToPlot(dataToPlot2, bounds3, printConfig.desiredBounds);
 
     var heightMap = {}; 
-    printAndIdentifyToHeightMap(heightMap, scaled1,'8');
-    printAndIdentifyToHeightMap(heightMap, scaled2,'3');
+    printAndIdentifyToHeightMap(heightMap, scaled1,5,'8');
+    printAndIdentifyToHeightMap(heightMap, scaled2,5,'3');
     console.log(dumpHeightMap(heightMap));
     console.log(dumpHeightMapByID(heightMap));
-    var mask8 = getMaskFromHeightMapByID(heightMap,'8');
+    var mask8 = getMaskFromHeightMapByID(heightMap,5,'8');
     jscad.renderFile(mask8,'8516_mask.stl');
-    var mask3 = getMaskFromHeightMapByID(heightMap,'3');
+    var mask3 = getMaskFromHeightMapByID(heightMap,5,'3');
     jscad.renderFile(mask3,'335_mask.stl');
 
     var print1 = getRampPrint(scaled1);
+    print1 = union(print1);
     jscad.renderFile(print1, '8516.stl');
+    jscad.renderFile(intersection(mask8, print1),'8516_masked.stl');
 
     var print2 = getRampPrint(scaled2); 
+    print2 = union(print2);
     jscad.renderFile(print2, '335.stl'); 
+    jscad.renderFile(intersection(mask3, print2),'335_masked.stl');
 
     // Nope, this doesn't work.  The solids aren't solid enough :( 
     // var cube = CSG.cube().scale(printConfig.desiredBounds.max);
