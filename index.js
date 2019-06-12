@@ -10,7 +10,7 @@ const config = {
     origin: "8516 Brookside Drive West 40056",
     minLatLng: [38.210, -85.678],  // must be smaller numbers than maxLatLng
     maxLatLng: [38.342, -85.447],
-    steps: [5, 5],
+    steps: [25, 25],
 }
 
 const runConfig = {
@@ -284,15 +284,15 @@ function getRamp(start, end, thick, zero) {
     var n = new CSG.Vector3D([0, 0, 10]); // straight up
     var crossed = direction.cross(n).unit().times(thick / 2); // to the clockwise
 
-    return CSG.polyhedron({
+    var poly1= CSG.polyhedron({
         points: [
             s.minus(crossed),
-            e.minus(crossed).plus(d),
-            e.plus(crossed).plus(d),
+            e.minus(crossed),
+            e.plus(crossed),
             s.plus(crossed),
             sb.minus(crossed),
-            eb.minus(crossed).plus(d),
-            eb.plus(crossed).plus(d),
+            eb.minus(crossed),
+            eb.plus(crossed),
             sb.plus(crossed)
         ],
         faces: [
@@ -304,14 +304,19 @@ function getRamp(start, end, thick, zero) {
             [1, 5, 6, 2]
         ]
     });
+    var poly2 = CSG.cylinder({ start: eb, end: e, radius: thick/2 })
+    var poly3 = poly1.union(poly2);
+    return poly3; 
 }
 
 function getRampPrint(dataToPlot) {
 
     var minResolutionSq = Math.pow(printConfig.printRadius * 4, 2);
 
-    var model = [];
-    dataToPlot.forEach(chain => {
+    var model = null;
+    for (var d=0; d<dataToPlot.length; d++) {
+        console.log("getRampPrint "+d+"/"+dataToPlot.length); 
+        var chain = dataToPlot[d]; 
 
         var pi = 0;
         for (var i = 1; i < chain.length; i++) {
@@ -322,11 +327,15 @@ function getRampPrint(dataToPlot) {
             if (dsq > minResolutionSq || i == chain.length - 1) {
 
                 var ramp = getRamp(chain[pi], chain[i], printConfig.printRadius, -printConfig.minThickness);
-                model.push(ramp);
+                if (model == null) { 
+                    model = ramp; 
+                } else { 
+                    model = model.union(ramp); 
+                }
                 pi = i;
             }
         };
-    });
+    };
     return model;
 }
 
@@ -493,40 +502,25 @@ void async function () {
     var scaled1 = scaleDataToPlot(dataToPlot1, bounds3, printConfig.desiredBounds);    
     var scaled2 = scaleDataToPlot(dataToPlot2, bounds3, printConfig.desiredBounds);
 
-    var heightMap = {}; 
-    printAndIdentifyToHeightMap(heightMap, scaled1,5,'8');
-    printAndIdentifyToHeightMap(heightMap, scaled2,5,'3');
-    console.log(dumpHeightMap(heightMap));
-    console.log(dumpHeightMapByID(heightMap));
-    var mask8 = getMaskFromHeightMapByID(heightMap,5,'8');
-    jscad.renderFile(mask8,'8516_mask.stl');
-    var mask3 = getMaskFromHeightMapByID(heightMap,5,'3');
-    jscad.renderFile(mask3,'335_mask.stl');
+    // This stuff doesn't work.   Problem is that CSG breaks down and the intersections
+    // end up ... aint right. 
+    //var heightMap = {}; 
+    //printAndIdentifyToHeightMap(heightMap, scaled1,5,'8');
+    //printAndIdentifyToHeightMap(heightMap, scaled2,5,'3');
+    //console.log(dumpHeightMap(heightMap));
+    //console.log(dumpHeightMapByID(heightMap));
+    //var mask8 = getMaskFromHeightMapByID(heightMap,5,'8');
+    // jscad.renderFile(mask8,'8516_mask.stl');
+    // var mask3 = getMaskFromHeightMapByID(heightMap,5,'3');
+    // jscad.renderFile(mask3,'335_mask.stl');
 
     var print1 = getRampPrint(scaled1);
-    print1 = union(print1);
     jscad.renderFile(print1, '8516.stl');
-    jscad.renderFile(intersection(mask8, print1),'8516_masked.stl');
+    //jscad.renderFile(print1.subtract(mask3),'8516_masked.stl');
 
     var print2 = getRampPrint(scaled2); 
-    print2 = union(print2);
     jscad.renderFile(print2, '335.stl'); 
-    jscad.renderFile(intersection(mask3, print2),'335_masked.stl');
-
-    // Nope, this doesn't work.  The solids aren't solid enough :( 
-    // var cube = CSG.cube().scale(printConfig.desiredBounds.max);
-    // console.log("starting unions");
-    // var a1 = union(print1); 
-    // var a2 = union(print2); 
-    // console.log("done with unions");
-    // jscad.renderFile(cube, 'cube.stl');
-    // var neg1 = cube.subtract(a1); 
-    // jscad.renderFile(neg1, 'neg1.stl');
-    // var neg2 = cube.subtract(a2); 
-    // jscad.renderFile(neg2, 'neg2.stl');
-
-    // var uneg = union(neg1, neg2); 
-    // jscad.renderFile(uneg,'uneg.stl');
+    // jscad.renderFile(intersection(mask3, print2),'335_masked.stl');
 
     console.log("done");
 }();
