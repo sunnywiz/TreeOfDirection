@@ -23,8 +23,9 @@ const printConfig = {
     // these are the limits of the printer .. mm ? 
     // MUST START at 0,0,0 for now
     desiredBounds: { min: [0, 0, 0], max: [80, 60, 20] },
-    printRadius: 1.5, // in units of desired bounds -- determines cylinder thickness
+    printRadius: 1, // in units of desired bounds -- determines cylinder thickness
     minThickness: 2, // added onto the bottom  
+    detailSize: 1  // a way of eliminating duplicates at this level
 }
 
 const googleMapsClient = require('@google/maps').createClient({
@@ -132,7 +133,7 @@ function getBounds(dataToPlot) {
 }
 
 function pointScale(point, bounds, desiredBounds) {
-    var newPoint = []; 
+    var newPoint = [];
     for (var i = 0; i < 3; i++) {
         var a = point[i] - bounds.min[i];  // zero-base it
         var b = a / (bounds.max[i] - bounds.min[i]); // 0..1 
@@ -140,7 +141,7 @@ function pointScale(point, bounds, desiredBounds) {
         var d = c + desiredBounds.min[i];
         newPoint.push(d);
     }
-    return newPoint; 
+    return newPoint;
 }
 
 async function cachedGoogleGetDirections(options) {
@@ -263,16 +264,16 @@ async function getCachedDataToPlot(config) {
 }
 
 function scaleDataToPlot(dataToPlot, initialBounds, desiredBounds) {
-    var result = []; 
+    var result = [];
     dataToPlot.forEach(chain => {
-        var newChain = []; 
+        var newChain = [];
         chain.forEach(segment => {
             var newPoint = pointScale(segment, initialBounds, desiredBounds);
-            newChain.push(newPoint); 
+            newChain.push(newPoint);
         });
-        result.push(newChain); 
+        result.push(newChain);
     });
-    return result; 
+    return result;
 }
 
 function getRamp(start, end, thick, zero) {
@@ -286,7 +287,7 @@ function getRamp(start, end, thick, zero) {
     var n = new CSG.Vector3D([0, 0, 10]); // straight up
     var crossed = direction.cross(n).unit().times(thick / 2); // to the clockwise
 
-    var poly1= CSG.polyhedron({
+    var poly1 = CSG.polyhedron({
         points: [
             s.minus(crossed),
             e.minus(crossed),
@@ -306,19 +307,21 @@ function getRamp(start, end, thick, zero) {
             [1, 5, 6, 2]
         ]
     });
-    var poly2 = CSG.cylinder({ start: eb, end: e, radius: thick/2, resolution:8 })
+    var poly2 = CSG.cylinder({ start: eb, end: e, radius: thick / 2, resolution: 8 })
     var poly3 = poly1.union(poly2);
-    return poly3; 
+    return poly3;
 }
 
 function getRampPrint(dataToPlot) {
 
     var minResolutionSq = Math.pow(printConfig.printRadius * 4, 2);
 
+    var seen = [];
+    var saved = 0;
     var model = [];
-    for (var d=0; d<dataToPlot.length; d++) {
-        console.log("getRampPrint "+d+"/"+dataToPlot.length); 
-        var chain = dataToPlot[d]; 
+    for (var d = 0; d < dataToPlot.length; d++) {
+        console.log("getRampPrint " + d + "/" + dataToPlot.length);
+        var chain = dataToPlot[d];
 
         var pi = 0;
         for (var i = 1; i < chain.length; i++) {
@@ -328,8 +331,24 @@ function getRampPrint(dataToPlot) {
                 Math.pow(chain[i][2] - chain[pi][2], 2);
             if (dsq > minResolutionSq || i == chain.length - 1) {
 
-                var ramp = getRamp(chain[pi], chain[i], printConfig.printRadius, -printConfig.minThickness);
-                model.push(ramp); 
+                // we've decided to print this one. 
+                // lets generate a hash key to see if its worthy of printing
+                var key = hash({
+                    x1: Math.round(chain[pi][0] / printConfig.detailSize),
+                    y1: Math.round(chain[pi][1] / printConfig.detailSize),
+                    z1: Math.round(chain[pi][2] / printConfig.detailSize),
+                    x2: Math.round(chain[i][0] / printConfig.detailSize),
+                    y2: Math.round(chain[i][1] / printConfig.detailSize),
+                    z2: Math.round(chain[i][2] / printConfig.detailSize)
+                });
+                if (!seen.hasOwnProperty(key)) {
+                    var ramp = getRamp(chain[pi], chain[i], printConfig.printRadius, -printConfig.minThickness);
+                    model.push(ramp);
+                    seen[key] = 1;
+                } else {
+                    saved++;
+                    console.log("saved " + saved + ", seen: " + Object.keys(seen).length);
+                }
                 pi = i;
             }
         };
@@ -351,133 +370,132 @@ function getBiggestBounds(b1, b2) {
     };
 }
 
-function setxy(a,x,y,v) { 
+function setxy(a, x, y, v) {
     if (typeof a !== 'object' || a === null) throw "1st parameter must be an object";
-    var b = a[x]; 
-    if (typeof a['ykeys'] !== 'object') a['ykeys'] = {}; 
-    if (typeof b !== 'object' || b === null) { 
-        b = {}; 
-        a[x] = b; 
+    var b = a[x];
+    if (typeof a['ykeys'] !== 'object') a['ykeys'] = {};
+    if (typeof b !== 'object' || b === null) {
+        b = {};
+        a[x] = b;
     }
-    a['ykeys'][y]=y;
-    b[y] = v; 
+    a['ykeys'][y] = y;
+    b[y] = v;
 }
-function getxy(a,x,y) { 
-    if (typeof a !== 'object' || a === null) throw "1st parameter must be an object"; 
-    var b = a[x]; 
-    if (typeof b !== 'object' || b === null) return undefined; 
-    return b[y]; 
+function getxy(a, x, y) {
+    if (typeof a !== 'object' || a === null) throw "1st parameter must be an object";
+    var b = a[x];
+    if (typeof b !== 'object' || b === null) return undefined;
+    return b[y];
 }
 
-function plot2D(heightMap, start, end, scale, identifier) { 
-    var x1 = start[0] / scale; 
+function plot2D(heightMap, start, end, scale, identifier) {
+    var x1 = start[0] / scale;
     var y1 = start[1] / scale;
-    var h1 = start[2]; 
+    var h1 = start[2];
     var x2 = end[0] / scale;
     var y2 = end[1] / scale;
-    var h2 = end[2]; 
+    var h2 = end[2];
 
-    var dx = Math.abs(x1-x2);
-    var dy = Math.abs(y1-y2); 
+    var dx = Math.abs(x1 - x2);
+    var dy = Math.abs(y1 - y2);
 
-    if (dx<0.5 && dy < 0.5) {  
-        var x = Math.round((x1+x2)/2.0);
-        var y = Math.round((y1+y2)/2.0);
-        var height = (h1+h2)/2.0;  
-        var c = getxy(heightMap, x, y); 
+    if (dx < 0.5 && dy < 0.5) {
+        var x = Math.round((x1 + x2) / 2.0);
+        var y = Math.round((y1 + y2) / 2.0);
+        var height = (h1 + h2) / 2.0;
+        var c = getxy(heightMap, x, y);
         if (c && c.height && c.height < height) return;   // already good, not changing it
 
-        setxy(heightMap, x, y, { height: height, identifier: identifier});
-    } else { 
+        setxy(heightMap, x, y, { height: height, identifier: identifier });
+    } else {
         // divide into two! 
-        var mx = (start[0]+end[0])/2.0; 
-        var my = (start[1]+end[1])/2.0; 
-        var mh = (h1+h2)/2.0; 
-        plot2D(heightMap, start, [mx,my,mh]);
-        plot2D(heightMap, [mx,my,mh], end);
+        var mx = (start[0] + end[0]) / 2.0;
+        var my = (start[1] + end[1]) / 2.0;
+        var mh = (h1 + h2) / 2.0;
+        plot2D(heightMap, start, [mx, my, mh]);
+        plot2D(heightMap, [mx, my, mh], end);
     }
 }
 
-function iteratexy(heightMap, finit, fxy, fendx) { 
-    var xkeys = Object.keys(heightMap).filter(function(x) { return x != 'ykeys'}).sort(function(a,b) { return a-b }); 
-    var ykeys = Object.keys(heightMap['ykeys']).sort(function(a,b) { return b-a});
-    var buffer = finit();  
-    for (var yk of ykeys) { 
-        for (var xk of xkeys) { 
-            var v = getxy(heightMap,xk,yk); 
-            buffer = fxy(buffer, v); 
+function iteratexy(heightMap, finit, fxy, fendx) {
+    var xkeys = Object.keys(heightMap).filter(function (x) { return x != 'ykeys' }).sort(function (a, b) { return a - b });
+    var ykeys = Object.keys(heightMap['ykeys']).sort(function (a, b) { return b - a });
+    var buffer = finit();
+    for (var yk of ykeys) {
+        for (var xk of xkeys) {
+            var v = getxy(heightMap, xk, yk);
+            buffer = fxy(buffer, v);
         }
-        if (fendx) buffer = fendx(buffer); 
+        if (fendx) buffer = fendx(buffer);
     }
-    return buffer; 
+    return buffer;
 }
 
-function dumpHeightMap(heightMap) { 
+function dumpHeightMap(heightMap) {
     // this should be two functions
 
     var legend = ".`:;+oxOX#%$@";
-    var legendLength = legend.length-1; 
-    var minHeight = printConfig.desiredBounds.min[2]; 
-    var maxHeight = printConfig.desiredBounds.max[2]; 
+    var legendLength = legend.length - 1;
+    var minHeight = printConfig.desiredBounds.min[2];
+    var maxHeight = printConfig.desiredBounds.max[2];
 
-    return iteratexy(heightMap, 
-        function() { return '';},
-        function(buffer, v) { 
-            if (v && v.height) { 
+    return iteratexy(heightMap,
+        function () { return ''; },
+        function (buffer, v) {
+            if (v && v.height) {
                 var h = v.height;
-                h = Math.round((h - minHeight) / (maxHeight-minHeight) * legendLength); 
+                h = Math.round((h - minHeight) / (maxHeight - minHeight) * legendLength);
                 //if (v.locked) h--; 
-                if (h<0) h = 0; 
+                if (h < 0) h = 0;
                 if (h > legendLength) h = legendLength;
-                return buffer + legend.charAt(h); 
-            } else { 
+                return buffer + legend.charAt(h);
+            } else {
                 return buffer + ' ';
             }
-            return buffer; 
-        }, 
-        function(buffer) { 
-            return buffer + '\n'; 
-        }); 
+            return buffer;
+        },
+        function (buffer) {
+            return buffer + '\n';
+        });
 }
 
-function dumpHeightMapByID(heightMap) { 
+function dumpHeightMapByID(heightMap) {
 
-    return iteratexy(heightMap, 
-        function() { return '';},
-        function(buffer, v) { 
-            if (v && v.identifier) { 
-                return buffer + v.identifier; 
-            } else { 
+    return iteratexy(heightMap,
+        function () { return ''; },
+        function (buffer, v) {
+            if (v && v.identifier) {
+                return buffer + v.identifier;
+            } else {
                 return buffer + ' ';
             }
-        }, 
-        function(buffer) { 
-            return buffer + '\n'; 
-        }); 
+        },
+        function (buffer) {
+            return buffer + '\n';
+        });
 }
 
-function printAndIdentifyToHeightMap(heightMap, dataToPlot, scale, identifier)
-{
+function printAndIdentifyToHeightMap(heightMap, dataToPlot, scale, identifier) {
     dataToPlot.forEach(chain => {
         var pi = 0;
         for (var i = 1; i < chain.length; i++) {
-            plot2D(heightMap, chain[i-1], chain[i], scale, identifier);
+            plot2D(heightMap, chain[i - 1], chain[i], scale, identifier);
         };
     });
 }
 
-function getMaskFromHeightMapByID(heightMap, scale, identifier) { 
-    var csgs = []; 
-    var xkeys = Object.keys(heightMap).filter(function(x) { return x != 'ykeys'}).sort(function(a,b) { return a-b }); 
-    var ykeys = Object.keys(heightMap['ykeys']).sort(function(a,b) { return b-a});
-    for (var yk of ykeys) { 
-        for (var xk of xkeys) { 
-            var v = getxy(heightMap,xk,yk); 
-            if (v && v.identifier==identifier) { 
-                var cube = CSG.cube().scale([0.5,0.5,0.5]); // -0.5 .. 0.5
-                cube = cube.scale([scale,scale,printConfig.desiredBounds.max[2]]); // all the way up
-                cube = cube.translate([xk*scale,yk*scale,0]) // matches up the rounding
-            csgs.push(cube);
+function getMaskFromHeightMapByID(heightMap, scale, identifier) {
+    var csgs = [];
+    var xkeys = Object.keys(heightMap).filter(function (x) { return x != 'ykeys' }).sort(function (a, b) { return a - b });
+    var ykeys = Object.keys(heightMap['ykeys']).sort(function (a, b) { return b - a });
+    for (var yk of ykeys) {
+        for (var xk of xkeys) {
+            var v = getxy(heightMap, xk, yk);
+            if (v && v.identifier == identifier) {
+                var cube = CSG.cube().scale([0.5, 0.5, 0.5]); // -0.5 .. 0.5
+                cube = cube.scale([scale, scale, printConfig.desiredBounds.max[2]]); // all the way up
+                cube = cube.translate([xk * scale, yk * scale, 0]) // matches up the rounding
+                csgs.push(cube);
             }
         }
     }
@@ -495,7 +513,7 @@ void async function () {
 
     // var bounds3 = getBiggestBounds(bounds1, bounds2);
 
-    var scaled1 = scaleDataToPlot(dataToPlot1, bounds1, printConfig.desiredBounds);    
+    var scaled1 = scaleDataToPlot(dataToPlot1, bounds1, printConfig.desiredBounds);
     // var scaled2 = scaleDataToPlot(dataToPlot2, bounds3, printConfig.desiredBounds);
 
     // This stuff doesn't work.   Problem is that CSG breaks down and the intersections
@@ -511,7 +529,7 @@ void async function () {
     // jscad.renderFile(mask3,'335_mask.stl');
 
     var print1 = getRampPrint(scaled1);
-    print1 = union(print1);  
+    print1 = union(print1);
     jscad.renderFile(print1, '335_9x6.stl');
     //jscad.renderFile(print1.subtract(mask3),'8516_masked.stl');
 
