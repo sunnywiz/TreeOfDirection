@@ -7,10 +7,12 @@ const fs = require('fs');
 const util = require('util');
 
 const config = {
-    origin: "8516 Brookside Drive West 40056",
-    minLatLng: [38.210, -85.678],  // must be smaller numbers than maxLatLng
-    maxLatLng: [38.342, -85.447],
-    steps: [25, 25],
+    origin: "335 Central Ave 40056",
+    minLatLng: [38.220, -85.730],  // must be smaller numbers than maxLatLng
+    maxLatLng: [38.340, -85.467],
+    // 1.5mm thick .. 3mm gap. 
+    // so 80/3 = 26 across, 60/3 = 20 down but we start at 0 so -1
+    steps: [25, 19],
 }
 
 const runConfig = {
@@ -20,9 +22,9 @@ const runConfig = {
 const printConfig = {
     // these are the limits of the printer .. mm ? 
     // MUST START at 0,0,0 for now
-    desiredBounds: { min: [0, 0, 0], max: [75, 75, 20] },
-    printRadius: 1, // in units of desired bounds -- determines cylinder thickness
-    minThickness: 1, // added onto the bottom  
+    desiredBounds: { min: [0, 0, 0], max: [80, 60, 20] },
+    printRadius: 1.5, // in units of desired bounds -- determines cylinder thickness
+    minThickness: 2, // added onto the bottom  
 }
 
 const googleMapsClient = require('@google/maps').createClient({
@@ -304,7 +306,7 @@ function getRamp(start, end, thick, zero) {
             [1, 5, 6, 2]
         ]
     });
-    var poly2 = CSG.cylinder({ start: eb, end: e, radius: thick/2 })
+    var poly2 = CSG.cylinder({ start: eb, end: e, radius: thick/2, resolution:8 })
     var poly3 = poly1.union(poly2);
     return poly3; 
 }
@@ -313,7 +315,7 @@ function getRampPrint(dataToPlot) {
 
     var minResolutionSq = Math.pow(printConfig.printRadius * 4, 2);
 
-    var model = null;
+    var model = [];
     for (var d=0; d<dataToPlot.length; d++) {
         console.log("getRampPrint "+d+"/"+dataToPlot.length); 
         var chain = dataToPlot[d]; 
@@ -327,11 +329,7 @@ function getRampPrint(dataToPlot) {
             if (dsq > minResolutionSq || i == chain.length - 1) {
 
                 var ramp = getRamp(chain[pi], chain[i], printConfig.printRadius, -printConfig.minThickness);
-                if (model == null) { 
-                    model = ramp; 
-                } else { 
-                    model = model.union(ramp); 
-                }
+                model.push(ramp); 
                 pi = i;
             }
         };
@@ -488,19 +486,17 @@ function getMaskFromHeightMapByID(heightMap, scale, identifier) {
 
 void async function () {
 
-    config.origin = "8516 Brookside Drive West 40056";
-
     let dataToPlot1 = await getCachedDataToPlot(config);
     var bounds1 = getBounds(dataToPlot1);
 
-    config.origin = "335 Central Ave 40056";
-    let dataToPlot2 = await getCachedDataToPlot(config);
-    var bounds2 = getBounds(dataToPlot2);
+    // config.origin = "335 Central Ave 40056";
+    // let dataToPlot2 = await getCachedDataToPlot(config);
+    // var bounds2 = getBounds(dataToPlot2);
 
-    var bounds3 = getBiggestBounds(bounds1, bounds2);
+    // var bounds3 = getBiggestBounds(bounds1, bounds2);
 
-    var scaled1 = scaleDataToPlot(dataToPlot1, bounds3, printConfig.desiredBounds);    
-    var scaled2 = scaleDataToPlot(dataToPlot2, bounds3, printConfig.desiredBounds);
+    var scaled1 = scaleDataToPlot(dataToPlot1, bounds1, printConfig.desiredBounds);    
+    // var scaled2 = scaleDataToPlot(dataToPlot2, bounds3, printConfig.desiredBounds);
 
     // This stuff doesn't work.   Problem is that CSG breaks down and the intersections
     // end up ... aint right. 
@@ -515,11 +511,12 @@ void async function () {
     // jscad.renderFile(mask3,'335_mask.stl');
 
     var print1 = getRampPrint(scaled1);
-    jscad.renderFile(print1, '8516.stl');
+    print1 = union(print1);  
+    jscad.renderFile(print1, '335_9x6.stl');
     //jscad.renderFile(print1.subtract(mask3),'8516_masked.stl');
 
-    var print2 = getRampPrint(scaled2); 
-    jscad.renderFile(print2, '335.stl'); 
+    // var print2 = getRampPrint(scaled2); 
+    // jscad.renderFile(print2, '335.stl'); 
     // jscad.renderFile(intersection(mask3, print2),'335_masked.stl');
 
     console.log("done");
