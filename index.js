@@ -12,7 +12,7 @@ const config = {
     maxLatLng: [38.340, -85.467],
     // 1.5mm thick .. 3mm gap. 
     // so 80/3 = 26 across, 60/3 = 20 down but we start at 0 so -1
-    steps: [25, 19],
+    steps: [48, 32],
 }
 
 const runConfig = {
@@ -22,8 +22,8 @@ const runConfig = {
 const printConfig = {
     // these are the limits of the printer .. mm ? 
     // MUST START at 0,0,0 for now
-    desiredBounds: { min: [0, 0, 0], max: [80, 60, 20] },
-    printRadius: 1, // in units of desired bounds -- determines cylinder thickness
+    desiredBounds: { min: [0, 0, 0], max: [320, 240, 20] },
+    printRadius: 2, // in units of desired bounds -- determines cylinder thickness
     minThickness: 2, // added onto the bottom  
     detailSize: 1  // a way of eliminating duplicates at this level
 }
@@ -79,25 +79,25 @@ function addDirectionsToPlot(dataToPlot, visitedLocations, result) {
 
             // trim off things at the ends of the legs that are too slow 
             // 1 mile in 2 minutes ~= 30 mph
-            var i = leg.steps.length - 1;
-            while (i > 5) {
-                if (leg.steps[i].duration.value < 120 &&
-                    leg.steps[i].distance.value < 1609) {
-                    leg.steps.pop();
-                    i--;
-                    continue;
-                } else {
-                    break;
-                }
-            }
+            // var i = leg.steps.length - 1;
+            // while (i > 5) {
+            //     if (leg.steps[i].duration.value < 120 &&
+            //         leg.steps[i].distance.value < 1609) {
+            //         leg.steps.pop();
+            //         i--;
+            //         continue;
+            //     } else {
+            //         break;
+            //     }
+            // }
 
             leg.steps.forEach(step => {
 
                 var chain = [];
 
-                if (step.travel_mode != "DRIVING") {
-                    return;
-                }
+                // if (step.travel_mode != "DRIVING") {
+                //     return;
+                // }
 
                 var polyLinePoints = polyline.decode(step.polyline.points);
                 var durationPerPoint = step.duration.value / (polyLinePoints.length - 1);
@@ -319,8 +319,14 @@ function getRampPrint(dataToPlot) {
     var seen = [];
     var saved = 0;
     var model = [];
+    var dTimer = new Date().getTime() + 10000; 
+    var sTimer = dTimer; 
     for (var d = 0; d < dataToPlot.length; d++) {
-        console.log("getRampPrint " + d + "/" + dataToPlot.length);
+        var dTime = new Date().getTime(); 
+        if (dTime >= dTimer) { 
+            console.log("getRampPrint " + d + "/" + dataToPlot.length);
+            dTimer += 10000; 
+        }
         var chain = dataToPlot[d];
 
         var pi = 0;
@@ -347,7 +353,11 @@ function getRampPrint(dataToPlot) {
                     seen[key] = 1;
                 } else {
                     saved++;
-                    console.log("saved " + saved + ", seen: " + Object.keys(seen).length);
+                    var sTime = new Date().getTime(); 
+                    if (sTime >= sTimer) {
+                        console.log("saved " + saved + ", seen: " + Object.keys(seen).length);
+                        sTimer += 10000; 
+                    }
                 }
                 pi = i;
             }
@@ -388,7 +398,12 @@ function getxy(a, x, y) {
     return b[y];
 }
 
-function plot2D(heightMap, start, end, scale, identifier) {
+function plot2D(heightMap, start, end, scale, identifier, stack) {
+
+    if (stack>10) { 
+        console.log("plot2d: ", start, end);
+    }
+
     var x1 = start[0] / scale;
     var y1 = start[1] / scale;
     var h1 = start[2];
@@ -412,8 +427,8 @@ function plot2D(heightMap, start, end, scale, identifier) {
         var mx = (start[0] + end[0]) / 2.0;
         var my = (start[1] + end[1]) / 2.0;
         var mh = (h1 + h2) / 2.0;
-        plot2D(heightMap, start, [mx, my, mh]);
-        plot2D(heightMap, [mx, my, mh], end);
+        plot2D(heightMap, start, [mx, my, mh],scale, identifier, stack+1);
+        plot2D(heightMap, [mx, my, mh], end,scale,identifier,stack+1);
     }
 }
 
@@ -507,35 +522,42 @@ void async function () {
     let dataToPlot1 = await getCachedDataToPlot(config);
     var bounds1 = getBounds(dataToPlot1);
 
-    // config.origin = "335 Central Ave 40056";
-    // let dataToPlot2 = await getCachedDataToPlot(config);
-    // var bounds2 = getBounds(dataToPlot2);
+    config.origin = "8516 Brookside Drive West 40056";
+    let dataToPlot2 = await getCachedDataToPlot(config);
+    var bounds2 = getBounds(dataToPlot2);
 
-    // var bounds3 = getBiggestBounds(bounds1, bounds2);
+    var bounds3 = getBiggestBounds(bounds1, bounds2);
 
-    var scaled1 = scaleDataToPlot(dataToPlot1, bounds1, printConfig.desiredBounds);
-    // var scaled2 = scaleDataToPlot(dataToPlot2, bounds3, printConfig.desiredBounds);
+    var scaled1 = scaleDataToPlot(dataToPlot1, bounds3, printConfig.desiredBounds);
+    var scaled2 = scaleDataToPlot(dataToPlot2, bounds3, printConfig.desiredBounds);
 
     // This stuff doesn't work.   Problem is that CSG breaks down and the intersections
     // end up ... aint right. 
-    //var heightMap = {}; 
-    //printAndIdentifyToHeightMap(heightMap, scaled1,5,'8');
-    //printAndIdentifyToHeightMap(heightMap, scaled2,5,'3');
-    //console.log(dumpHeightMap(heightMap));
-    //console.log(dumpHeightMapByID(heightMap));
-    //var mask8 = getMaskFromHeightMapByID(heightMap,5,'8');
-    // jscad.renderFile(mask8,'8516_mask.stl');
-    // var mask3 = getMaskFromHeightMapByID(heightMap,5,'3');
-    // jscad.renderFile(mask3,'335_mask.stl');
+    var heightMap = {}; 
+    printAndIdentifyToHeightMap(heightMap, scaled1,5,'3');
+    printAndIdentifyToHeightMap(heightMap, scaled2,5,'8');
+    console.log(dumpHeightMapByID(heightMap));
+    var mask8 = getMaskFromHeightMapByID(heightMap,5,'8');
+    jscad.renderFile(mask8,'8516_mask.stl');
+    var mask3 = getMaskFromHeightMapByID(heightMap,5,'3');
+    jscad.renderFile(mask3,'335_mask.stl');
 
     var print1 = getRampPrint(scaled1);
-    print1 = union(print1);
-    jscad.renderFile(print1, '335_9x6.stl');
-    //jscad.renderFile(print1.subtract(mask3),'8516_masked.stl');
+    //  Not this -- this uses a serial one, lots of wasted CPU: 
+    // print1 = union(print1);
+    
+    // instead this: 
+    var a0 = print1.pop(); 
+    print1 = a0.union(print1); 
 
-    // var print2 = getRampPrint(scaled2); 
-    // jscad.renderFile(print2, '335.stl'); 
-    // jscad.renderFile(intersection(mask3, print2),'335_masked.stl');
+    jscad.renderFile(print1, '335.stl');
+    jscad.renderFile(print1.subtract(mask8),'335_masked.stl');
+
+    var print2 = getRampPrint(scaled2); 
+    a0 = print2.pop(); 
+    print2 = a0.union(print2); 
+    jscad.renderFile(print2, '8516.stl'); 
+    jscad.renderFile(print2.subtract(mask3),'8516_masked.stl');
 
     console.log("done");
 }();
